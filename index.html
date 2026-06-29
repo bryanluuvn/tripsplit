@@ -338,7 +338,7 @@ function nowTimeStr() {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
-function renderCategoryChart(expenses) {
+function computeCategoryTotals(expenses) {
   const totals = {};
   let grandTotal = 0;
   expenses.forEach(e => {
@@ -346,11 +346,15 @@ function renderCategoryChart(expenses) {
     totals[key] = (totals[key] || 0) + e.amount;
     grandTotal += e.amount;
   });
-  if (grandTotal <= 0) return '';
-
   const rows = Object.entries(totals)
-    .map(([cat, amt]) => ({ cat, amt, pct: amt / grandTotal }))
+    .map(([cat, amt]) => ({ cat, amt, pct: grandTotal > 0 ? amt / grandTotal : 0 }))
     .sort((a, b) => b.amt - a.amt);
+  return { rows, grandTotal };
+}
+
+function renderCategoryChart(expenses) {
+  const { rows, grandTotal } = computeCategoryTotals(expenses);
+  if (grandTotal <= 0) return '';
 
   // Vẽ donut bằng conic-gradient thuần CSS, không cần thư viện ngoài
   let gradientStops = [];
@@ -393,6 +397,208 @@ function renderCategoryChart(expenses) {
   html += `</div></div>`;
 
   return html;
+}
+
+function generateSummaryImage(trip, expenses, balances, settlements) {
+  const W = 600;
+  const PAD = 36;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const scale = 2; // render @2x cho ảnh nét trên màn hình retina
+
+  // --- Bước 1: đo trước chiều cao cần thiết bằng cách render thử trên canvas tạm ---
+  const { rows: catRows, grandTotal } = computeCategoryTotals(expenses);
+  // Header (logo 50) + tên trip (22+8+28) + tổng chi (26+36)
+  let estHeight = PAD + 50 + 22 + 8 + 28 + 26 + 36;
+  if (catRows.length > 0) {
+    const donutBlockHeight = Math.max(108, catRows.length * 26 + 8);
+    estHeight += donutBlockHeight + 28;
+  }
+  estHeight += 22 + trip.members.length * 26 + 6 + 28; // số dư + line
+  estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
+  estHeight += 20; // footer + padding đáy
+
+  canvas.width = W * scale;
+  canvas.height = estHeight * scale;
+  ctx.scale(scale, scale);
+
+  // --- Nền ---
+  ctx.fillStyle = '#F8F9FF';
+  ctx.fillRect(0, 0, W, estHeight);
+
+  let y = PAD;
+
+  // --- Header: logo + tên app ---
+  ctx.save();
+  const markGrad = ctx.createLinearGradient(PAD, y, PAD + 30, y + 30);
+  markGrad.addColorStop(0, '#4A6CF7');
+  markGrad.addColorStop(1, '#8B5CF6');
+  ctx.fillStyle = markGrad;
+  roundRect(ctx, PAD, y, 30, 30, 9);
+  ctx.fill();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(PAD + 7, y + 14); ctx.lineTo(PAD + 22, y + 14); ctx.lineTo(PAD + 18, y + 10);
+  ctx.moveTo(PAD + 23, y + 19); ctx.lineTo(PAD + 8, y + 19); ctx.lineTo(PAD + 12, y + 23);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = '#1A1A2E';
+  ctx.font = '600 15px -apple-system, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Trip Split', PAD + 40, y + 16);
+  y += 50;
+
+  // --- Tên trip ---
+  ctx.fillStyle = '#1A1A2E';
+  ctx.font = '600 22px -apple-system, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(trip.name, PAD, y);
+  y += 8;
+  ctx.strokeStyle = '#E3E5F2';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+  y += 28;
+
+  // --- Tổng chi ---
+  ctx.fillStyle = '#9295B0';
+  ctx.font = '600 11px -apple-system, sans-serif';
+  ctx.fillText('TỔNG CHI TIÊU', PAD, y);
+  y += 26;
+  ctx.fillStyle = '#1A1A2E';
+  ctx.font = '700 28px -apple-system, sans-serif';
+  ctx.fillText(fmt(grandTotal), PAD, y);
+  y += 36;
+
+  // --- Donut chart + legend ---
+  if (catRows.length > 0) {
+    const cx = PAD + 50, cy = y + 50, r = 50, rInner = 30;
+    let startAngle = -Math.PI / 2;
+    catRows.forEach(row => {
+      const sweep = row.pct * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, startAngle, startAngle + sweep);
+      ctx.closePath();
+      ctx.fillStyle = categoryColor(row.cat);
+      ctx.fill();
+      startAngle += sweep;
+    });
+    ctx.fillStyle = '#F8F9FF';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
+    ctx.fill();
+
+    let ly = y + 14;
+    const legendX = PAD + 120;
+    catRows.forEach(row => {
+      ctx.fillStyle = categoryColor(row.cat);
+      ctx.beginPath();
+      ctx.arc(legendX, ly, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#585B78';
+      ctx.font = '500 13px -apple-system, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(categoryLabel(row.cat), legendX + 12, ly + 1);
+      ctx.fillStyle = '#1A1A2E';
+      ctx.font = '600 13px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(Math.round(row.pct * 100) + '%', W - PAD, ly + 1);
+      ctx.textAlign = 'left';
+      ly += 26;
+    });
+    const donutBlockHeight = Math.max(108, catRows.length * 26 + 8);
+    y += donutBlockHeight;
+    ctx.strokeStyle = '#E3E5F2';
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+    y += 28;
+  }
+
+  // --- Số dư từng người ---
+  ctx.fillStyle = '#9295B0';
+  ctx.font = '600 11px -apple-system, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('SỐ DƯ TỪNG NGƯỜI', PAD, y);
+  y += 22;
+  trip.members.forEach(m => {
+    const bal = Math.round(balances[m] || 0);
+    const isPos = bal > 100, isNeg = bal < -100;
+    ctx.fillStyle = '#1A1A2E';
+    ctx.font = '500 14px -apple-system, sans-serif';
+    ctx.fillText(m, PAD, y);
+    ctx.fillStyle = isPos ? '#1A9461' : isNeg ? '#D6453A' : '#9295B0';
+    ctx.font = '600 14px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText((bal > 0 ? '+' : '') + fmt(bal), W - PAD, y);
+    ctx.textAlign = 'left';
+    y += 26;
+  });
+  y += 6;
+  ctx.strokeStyle = '#E3E5F2';
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+  y += 28;
+
+  // --- Kết quả thanh toán ---
+  ctx.fillStyle = '#9295B0';
+  ctx.font = '600 11px -apple-system, sans-serif';
+  ctx.fillText('KẾT QUẢ THANH TOÁN', PAD, y);
+  y += 24;
+  if (settlements.length === 0) {
+    ctx.fillStyle = '#585B78';
+    ctx.font = '500 14px -apple-system, sans-serif';
+    ctx.fillText('Mọi người đã hòa sổ', PAD, y);
+    y += 26;
+  } else {
+    settlements.forEach(s => {
+      ctx.fillStyle = '#1A1A2E';
+      ctx.font = '600 14px -apple-system, sans-serif';
+      ctx.fillText(s.from, PAD, y);
+      const fromWidth = ctx.measureText(s.from).width;
+      ctx.fillStyle = '#8B5CF6';
+      ctx.font = '600 14px -apple-system, sans-serif';
+      ctx.fillText(' → ', PAD + fromWidth, y);
+      const arrowWidth = ctx.measureText(' → ').width;
+      ctx.fillStyle = '#1A1A2E';
+      ctx.fillText(s.to, PAD + fromWidth + arrowWidth, y);
+      ctx.font = '700 14px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(fmt(s.amount), W - PAD, y);
+      ctx.textAlign = 'left';
+      y += 28;
+    });
+  }
+  y += 10;
+
+  // --- Footer ---
+  ctx.fillStyle = '#9295B0';
+  ctx.font = '400 11px -apple-system, sans-serif';
+  ctx.fillText('Tạo bởi Trip Split', PAD, y);
+
+  // --- Xuất PNG ---
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}-tong-ket.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Đã tải ảnh tổng kết');
+  }, 'image/png');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function computeBalances(members, expenses) {
@@ -454,6 +660,7 @@ let expDraft = { id: null, paidBy: '', amount: '', desc: '', splitWith: [], date
 let memberInput = '';
 let newTripName = '';
 let renameTripDraft = '';
+let editMemberDraft = { oldName: '', newName: '' };
 let isLoading = true;
 let loadError = null;
 let pollTimer = null;
@@ -567,14 +774,14 @@ function render() {
     </div>`;
 
     html += `<div class="card">
-      <div class="card-head"><span class="card-title">Thành viên</span></div>
+      <div class="card-head"><span class="card-title">Thành viên</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">Bấm tên để sửa</span></div>
       <div class="row" style="margin-bottom:12px;">`;
     if (trip.members.length === 0) {
       html += `<span style="font-size:13px; color:var(--text-muted);">Chưa có thành viên nào.</span>`;
     }
     trip.members.forEach(m => {
       const hasExpenses = expenses.some(e => e.paidBy === m);
-      html += `<span class="member-tag">${escapeHtml(m)}<button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button></span>`;
+      html += `<span class="member-tag"><span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span><button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button></span>`;
     });
     html += `</div><div class="row">
       <input id="memberInput" placeholder="Tên thành viên" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
@@ -638,7 +845,11 @@ function render() {
       html += `<div class="card">
         <div class="card-head">
           <span class="card-title">Kết quả chia tiền</span>
-          <button data-action="copySummary">📋 Copy để gửi</button>
+          <div class="row" style="gap:6px;">
+            <button class="icon-btn" data-action="exportCsv" aria-label="Xuất CSV" title="Xuất CSV">⬇️</button>
+            <button class="icon-btn" data-action="exportImage" aria-label="Xuất ảnh tổng kết" title="Xuất ảnh tổng kết">🖼️</button>
+            <button data-action="copySummary">📋 Copy để gửi</button>
+          </div>
         </div>`;
       if (settlements.length === 0) {
         html += `<p class="empty">Mọi người đã hòa sổ, không cần chuyển tiền.</p>`;
@@ -700,6 +911,11 @@ function handleAction(e) {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
     modal = 'renameTrip'; render();
+  }
+
+  if (action === 'openEditMember') {
+    editMemberDraft = { oldName: name, newName: name };
+    modal = 'editMember'; render();
   }
 
   if (action === 'removeMember') {
@@ -776,6 +992,63 @@ function handleAction(e) {
     );
   }
 
+  if (action === 'exportImage') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const expenses = getExpensesForTrip(trip.trip_id);
+    const balances = computeBalances(trip.members, expenses);
+    const settlements = simplifyDebts(balances);
+    generateSummaryImage(trip, expenses, balances, settlements);
+  }
+
+  if (action === 'exportCsv') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const expenses = getExpensesForTrip(trip.trip_id);
+    const balances = computeBalances(trip.members, expenses);
+    const settlements = simplifyDebts(balances);
+
+    function csvEscape(val) {
+      const s = String(val ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    let rows = [];
+    rows.push(['Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả', 'Số tiền (VNĐ)', 'Chia cho']);
+    expenses.slice().reverse().forEach(ex => {
+      rows.push([
+        ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
+        ex.desc || '', Math.round(ex.amount),
+        ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm',
+      ]);
+    });
+    rows.push([]);
+    rows.push(['Số dư từng người']);
+    trip.members.forEach(m => {
+      rows.push([m, Math.round(balances[m] || 0)]);
+    });
+    rows.push([]);
+    rows.push(['Kết quả thanh toán']);
+    if (settlements.length === 0) {
+      rows.push(['Mọi người đã hòa sổ']);
+    } else {
+      settlements.forEach(s => rows.push([s.from, 'chuyển cho', s.to, Math.round(s.amount)]));
+    }
+
+    const csvContent = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Đã tải file CSV');
+  }
+
   if (action === 'copySummary') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const expenses = getExpensesForTrip(trip.trip_id);
@@ -829,6 +1102,23 @@ function renderModal() {
       <div class="row" style="justify-content:flex-end;">
         <button onclick="window.app.closeModal()">Hủy</button>
         <button class="primary" onclick="window.app.renameTrip()">Lưu</button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'editMember') {
+    overlay.innerHTML = `<div class="modal">
+      <h2>Sửa tên thành viên</h2>
+      <div class="field">
+        <label>Tên</label>
+        <input id="editMemberInput" value="${escapeHtml(editMemberDraft.newName)}">
+        <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+          Mọi chi tiêu trước đây của <strong>${escapeHtml(editMemberDraft.oldName)}</strong> sẽ tự cập nhật theo tên mới.
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button onclick="window.app.closeModal()">Hủy</button>
+        <button class="primary" onclick="window.app.renameMember()">Lưu</button>
       </div>
     </div>`;
   }
@@ -897,6 +1187,13 @@ function renderModal() {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.renameTrip(); });
     inp.focus();
   }
+  if (modal === 'editMember') {
+    const inp = document.getElementById('editMemberInput');
+    inp.addEventListener('input', e => editMemberDraft.newName = e.target.value);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.renameMember(); });
+    inp.focus();
+    inp.select();
+  }
   if (modal === 'addExpense') {
     document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
     document.getElementById('dateInput').addEventListener('input', e => expDraft.date = e.target.value);
@@ -961,6 +1258,56 @@ window.app = {
     withSaving(
       () => { trip.trip_name = name; },
       () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name })
+    );
+  },
+
+  renameMember() {
+    const newName = editMemberDraft.newName.trim();
+    const oldName = editMemberDraft.oldName;
+    if (!newName || newName === oldName) { modal = null; render(); return; }
+
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    const currentMembers = parseMembers(trip.members);
+    if (currentMembers.includes(newName)) {
+      showToast('Đã có thành viên tên này trong trip');
+      return;
+    }
+    const newMembers = currentMembers.map(m => m === oldName ? newName : m);
+    const tripId = activeTripId;
+
+    // Tìm mọi expense liên quan tới tên cũ (đã trả, hoặc trong danh sách chia)
+    const affectedExpenses = rawExpenses.filter(ex =>
+      ex.trip_id === tripId && (ex.paid_by === oldName || parseMembers(ex.split_with).includes(oldName))
+    );
+
+    modal = null;
+    withSaving(
+      () => {
+        trip.members = newMembers.join(',');
+        affectedExpenses.forEach(ex => {
+          if (ex.paid_by === oldName) ex.paid_by = newName;
+          const splitList = parseMembers(ex.split_with);
+          if (splitList.includes(oldName)) {
+            ex.split_with = splitList.map(m => m === oldName ? newName : m).join(',');
+          }
+        });
+      },
+      async () => {
+        await apiPost({ action: 'updateTripMembers', trip_id: tripId, members: newMembers.join(',') });
+        for (const ex of affectedExpenses) {
+          await apiPost({
+            action: 'editExpense',
+            expense_id: ex.expense_id,
+            paid_by: ex.paid_by,
+            amount: ex.amount,
+            desc: ex.desc,
+            split_with: ex.split_with,
+            date: ex.date,
+            time: ex.time,
+            category: ex.category,
+          });
+        }
+      }
     );
   },
 
