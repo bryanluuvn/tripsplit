@@ -3,154 +3,291 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Trip Split - Chia tiền trip</title>
+<title>Trip Split — Bryan In Data</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
-    --bg: #F8F9FF;
+    /* Bryan In Data brand tokens */
+    --navy: #1A1A2E;
+    --blue: #4A6CF7;
+    --blue-dark: #3A56D4;
+    --purple: #8B5CF6;
+    --bg-tint: #F8F9FF;
+
+    --bg: var(--bg-tint);
     --surface: #FFFFFF;
     --surface-2: #F1F2FA;
-    --border: #E1E3F0;
-    --border-strong: #C7CAE6;
-    --text-primary: #1A1A2E;
-    --text-secondary: #5C5E78;
-    --text-muted: #8A8CA8;
-    --accent: #4A6CF7;
+    --surface-3: #E9EBFA;
+    --border: #E3E5F2;
+    --border-strong: #CBCFE8;
+    --text-primary: var(--navy);
+    --text-secondary: #585B78;
+    --text-muted: #9295B0;
+    --accent: var(--blue);
     --accent-bg: #EDF0FE;
-    --accent-text: #2F4FD8;
-    --danger: #D8473B;
-    --radius: 10px;
+    --accent-text: var(--blue-dark);
+    --accent-2: var(--purple);
+    --accent-2-bg: #F1ECFE;
+    --accent-2-text: #6D3FD9;
+    --success: #1A9461;
+    --success-bg: #E7F6EE;
+    --danger: #D6453A;
+    --danger-bg: #FCEDEB;
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --shadow-card: 0 1px 2px rgba(26,26,46,0.04), 0 1px 8px rgba(26,26,46,0.03);
+    --shadow-modal: 0 12px 40px rgba(26,26,46,0.18);
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
+    background:
+      radial-gradient(circle at 8% 0%, rgba(139,92,246,0.07), transparent 45%),
+      radial-gradient(circle at 100% 12%, rgba(74,108,247,0.08), transparent 40%),
+      var(--bg);
+    background-attachment: fixed;
     color: var(--text-primary);
-    padding: 1rem;
+    padding: 1.25rem 1rem 3rem;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
+
   .wrap { max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 1rem; display: flex; align-items: center; gap: 8px; }
+
+  .app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+  .app-header .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 14px; font-weight: 700; flex-shrink: 0;
+  }
+  h1 {
+    font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
+    display: flex; flex-direction: column; line-height: 1.25;
+  }
+  h1 .sub { font-size: 11px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.02em; text-transform: uppercase; }
+
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
   .card {
     background: var(--surface);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem;
+    margin-bottom: 0.9rem;
+    box-shadow: var(--shadow-card);
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;
+  }
+  .card-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    display: flex; align-items: center; gap: 6px;
   }
   .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+
   input, select {
-    height: 38px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    padding: 0 10px;
+    height: 40px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0 12px;
     font-size: 15px;
     background: var(--surface);
     color: var(--text-primary);
     width: 100%;
+    transition: border-color 0.15s ease;
+    font-family: inherit;
   }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input::placeholder { color: var(--text-muted); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
   button {
-    height: 38px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    height: 40px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text-primary);
     font-size: 14px;
-    padding: 0 14px;
-    cursor: pointer;
-  }
-  button:hover { background: var(--surface-2); }
-  button:active { transform: scale(0.98); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button.primary {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
     font-weight: 500;
-  }
-  button.primary:hover { background: #3D5DE0; }
-  button.ghost { border: none; background: none; color: var(--text-muted); padding: 4px; }
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border-strong);
-    background: var(--surface);
-    font-size: 14px;
+    padding: 0 16px;
     cursor: pointer;
+    transition: all 0.12s ease;
+    font-family: inherit;
+  }
+  button:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary {
+    background: var(--blue);
+    color: white;
+    border-color: var(--blue);
+    box-shadow: 0 2px 8px rgba(74,108,247,0.3);
+  }
+  button.primary:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+  button.ghost { border: none; background: none; color: var(--text-muted); padding: 4px; height: auto; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px;
+    border: 1.5px solid var(--border-strong);
+    background: var(--surface); font-size: 13.5px; font-weight: 500; cursor: pointer;
+    transition: all 0.12s ease;
   }
   .pill.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
+
   .member-tag {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--surface-2); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 14px;
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--surface-2); border-radius: 20px; padding: 6px 6px 6px 13px;
+    font-size: 13.5px; font-weight: 500; color: var(--text-primary);
   }
-  .member-tag button { height: auto; border: none; background: none; padding: 2px; font-size: 14px; color: var(--text-muted); }
+  .member-tag button { height: auto; border: none; background: none; padding: 3px 6px; font-size: 13px; color: var(--text-muted); }
+  .member-tag button:hover { color: var(--danger); background: none; }
+
   .expense-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 11px 0; border-bottom: 1px solid var(--border);
+    gap: 10px;
   }
-  .expense-row:last-child { border-bottom: none; }
-  .expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-  .amount { font-weight: 600; }
-  .settlement-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 14px; }
+  .expense-row:last-child { border-bottom: none; padding-bottom: 2px; }
+  .expense-row:first-child { padding-top: 2px; }
+  .expense-main { font-size: 14.5px; }
+  .expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+  .amount { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
+  .expense-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+  .settlement-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0; font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .settlement-row:last-child { border-bottom: none; }
   .settlement-row .spacer { flex: 1; }
-  .empty { color: var(--text-muted); font-size: 14px; padding: 0.5rem 0; }
+  .settlement-arrow { color: var(--accent-2); font-weight: 600; }
+
+  .empty {
+    color: var(--text-muted); font-size: 13.5px; padding: 1.1rem 0; text-align: center;
+  }
+
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(26,26,46,0.5);
+    position: fixed; inset: 0; background: rgba(26,26,46,0.55);
     display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50;
+    backdrop-filter: blur(2px);
   }
   .modal {
-    background: var(--surface); border-radius: 14px; padding: 1.25rem;
+    background: var(--surface); border-radius: var(--radius-lg); padding: 1.4rem;
     width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+    box-shadow: var(--shadow-modal);
   }
-  .modal h2 { font-size: 16px; margin: 0 0 12px; }
-  .field { margin-bottom: 12px; }
-  .field label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
-  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .modal h2 { font-size: 16.5px; font-weight: 600; margin: 0 0 14px; letter-spacing: -0.01em; }
+  .field { margin-bottom: 14px; }
+  .field label { font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 6px; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.1rem; }
   .tab {
-    padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-strong);
-    background: var(--surface); font-size: 14px; cursor: pointer;
+    padding: 7px 15px; border-radius: 20px; border: 1.5px solid var(--border);
+    background: var(--surface); font-size: 13.5px; font-weight: 500; cursor: pointer;
+    color: var(--text-secondary); transition: all 0.12s ease;
   }
-  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .tab:hover { border-color: var(--border-strong); }
+  .tab.active {
+    background: var(--navy); color: white; border-color: var(--navy);
+  }
+  .tab.add-tab { color: var(--accent-text); border-color: var(--accent-bg); background: var(--accent-bg); }
+
   .toast {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    background: var(--text-primary); color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; z-index: 100;
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: white; padding: 10px 18px; border-radius: 24px;
+    font-size: 13.5px; font-weight: 500; z-index: 100; box-shadow: 0 8px 24px rgba(26,26,46,0.25);
   }
-  .total-line { text-align: right; font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
-  .danger-link { color: var(--danger); font-size: 13px; background: none; border: none; padding: 4px 0; cursor: pointer; }
+
+  .total-line {
+    text-align: right; font-size: 13px; color: var(--text-secondary); margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .danger-link {
+    color: var(--danger); font-size: 13px; font-weight: 500; background: none;
+    border: none; padding: 6px 0; cursor: pointer;
+  }
+
   .cat-badge {
-    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
-    background: var(--surface-2); color: var(--text-secondary); margin-right: 6px;
+    display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600;
+    padding: 3px 8px; border-radius: 6px; margin-right: 7px;
+    background: var(--accent-2-bg); color: var(--accent-2-text);
+    text-transform: uppercase; letter-spacing: 0.02em;
   }
-  .balance-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
-  .balance-pos { color: #1F8A4C; }
+
+  .balance-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border);
+  }
+  .balance-row:last-child { border-bottom: none; }
+  .balance-name { font-weight: 500; }
+  .balance-amt { font-weight: 600; }
+  .balance-pos { color: var(--success); }
   .balance-neg { color: var(--danger); }
-  .icon-btn { border: none; background: none; padding: 4px; cursor: pointer; display: inline-flex; color: var(--text-muted); }
-  .icon-btn:hover { color: var(--text-primary); }
+  .balance-note { color: var(--text-muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
+
+  .icon-btn {
+    border: none; background: none; padding: 6px; cursor: pointer; display: inline-flex;
+    color: var(--text-muted); border-radius: var(--radius-sm); transition: all 0.12s ease;
+  }
+  .icon-btn:hover { color: var(--text-primary); background: var(--surface-2); }
+
   .sync-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: #888; display: inline-block;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted);
+    display: inline-block; flex-shrink: 0;
   }
-  .sync-dot.ok { background: #2DB36B; }
+  .sync-dot.ok { background: var(--success); }
   .sync-dot.error { background: var(--danger); }
+
   .setup-banner {
-    background: #FFF4E5; border: 1px solid #F0C36B; border-radius: var(--radius);
-    padding: 12px; font-size: 13px; margin-bottom: 1rem; color: #6B4E14;
+    background: #FFF7E8; border: 1px solid #F0CB7C; border-radius: var(--radius);
+    padding: 14px; font-size: 13.5px; margin-bottom: 1rem; color: #7A5414;
   }
+
   .spinner {
     display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong);
     border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Category summary chart */
+  .cat-chart-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13.5px;
+  }
+  .cat-chart-label { width: 76px; flex-shrink: 0; color: var(--text-secondary); font-weight: 500; }
+  .cat-chart-bar-track {
+    flex: 1; height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden;
+  }
+  .cat-chart-bar-fill { height: 100%; border-radius: 5px; }
+  .cat-chart-amt { width: 64px; text-align: right; font-weight: 600; flex-shrink: 0; }
+  .cat-chart-pct { width: 38px; text-align: right; color: var(--text-muted); font-size: 11.5px; flex-shrink: 0; }
+
+  .donut-wrap { display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap; }
+  .donut-legend { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { color: var(--text-secondary); flex: 1; }
+  .legend-val { font-weight: 600; color: var(--text-primary); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Trip Split <span id="syncDot" class="sync-dot" title="Trạng thái đồng bộ"></span></h1>
+  <div class="app-header">
+    <div class="brand">
+      <div class="brand-mark">B</div>
+      <h1>Trip Split<span class="sub">Bryan in data</span></h1>
+    </div>
+    <span id="syncDot" class="sync-dot" title="Trạng thái đồng bộ"></span>
+  </div>
   <div id="app"></div>
 </div>
 
@@ -160,26 +297,94 @@ const API_URL = 'https://script.google.com/macros/s/AKfycby_YCMUQ0o9zzYbk1zttsYK
 /* ============================================================= */
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
-function fmt(n) { return Math.round(n).toLocaleString('vi-VN') + 'đ'; }
+function fmt(n) {
+  const rounded = Math.round(n);
+  const k = rounded / 1000;
+  // Nếu chia hết cho 1000 thì hiện số nguyên + k, nếu không thì hiện 1 số lẻ
+  const kRounded = Math.round(k * 10) / 10;
+  const display = kRounded % 1 === 0 ? kRounded.toFixed(0) : kRounded.toFixed(1);
+  return display.replace('.', ',') + 'k';
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
 
 const CATEGORIES = [
-  { id: '', label: 'Khác' },
-  { id: 'food', label: 'Ăn uống' },
-  { id: 'transport', label: 'Di chuyển' },
-  { id: 'stay', label: 'Chỗ ở' },
-  { id: 'activity', label: 'Vui chơi' },
+  { id: '', label: 'Khác', color: '#9295B0' },
+  { id: 'food', label: 'Ăn uống', color: '#8B5CF6' },
+  { id: 'transport', label: 'Di chuyển', color: '#4A6CF7' },
+  { id: 'stay', label: 'Chỗ ở', color: '#1A1A2E' },
+  { id: 'activity', label: 'Vui chơi', color: '#D6453A' },
 ];
 function categoryLabel(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.label : 'Khác';
 }
+function categoryColor(id) {
+  const found = CATEGORIES.find(c => c.id === id);
+  return found ? found.color : '#9295B0';
+}
 function nowTimeStr() {
   const d = new Date();
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function renderCategoryChart(expenses) {
+  const totals = {};
+  let grandTotal = 0;
+  expenses.forEach(e => {
+    const key = e.category || '';
+    totals[key] = (totals[key] || 0) + e.amount;
+    grandTotal += e.amount;
+  });
+  if (grandTotal <= 0) return '';
+
+  const rows = Object.entries(totals)
+    .map(([cat, amt]) => ({ cat, amt, pct: amt / grandTotal }))
+    .sort((a, b) => b.amt - a.amt);
+
+  // Vẽ donut bằng conic-gradient thuần CSS, không cần thư viện ngoài
+  let gradientStops = [];
+  let acc = 0;
+  rows.forEach(r => {
+    const start = acc * 360;
+    acc += r.pct;
+    const end = acc * 360;
+    gradientStops.push(`${categoryColor(r.cat)} ${start}deg ${end}deg`);
+  });
+  const gradient = `conic-gradient(${gradientStops.join(', ')})`;
+
+  let html = `<div class="card">
+    <div class="card-head"><span class="card-title">Chi tiêu theo loại</span></div>
+    <div class="donut-wrap">
+      <div style="width:96px; height:96px; border-radius:50%; background:${gradient}; flex-shrink:0; position:relative;">
+        <div style="position:absolute; inset:14px; background:var(--surface); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:var(--text-secondary); text-align:center; line-height:1.3;">
+          ${fmt(grandTotal)}
+        </div>
+      </div>
+      <div class="donut-legend">`;
+  rows.forEach(r => {
+    html += `<div class="legend-item">
+      <span class="legend-dot" style="background:${categoryColor(r.cat)};"></span>
+      <span class="legend-label">${escapeHtml(categoryLabel(r.cat))}</span>
+      <span class="legend-val">${Math.round(r.pct * 100)}%</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  html += `<div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">`;
+  rows.forEach(r => {
+    html += `<div class="cat-chart-row">
+      <span class="cat-chart-label">${escapeHtml(categoryLabel(r.cat))}</span>
+      <span class="cat-chart-bar-track"><span class="cat-chart-bar-fill" style="width:${Math.max(r.pct * 100, 3)}%; background:${categoryColor(r.cat)};"></span></span>
+      <span class="cat-chart-amt">${fmt(r.amt)}</span>
+      <span class="cat-chart-pct">${Math.round(r.pct * 100)}%</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  return html;
 }
 
 function computeBalances(members, expenses) {
@@ -339,7 +544,7 @@ function render() {
   trips.forEach(t => {
     html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
   });
-  html += `<div class="tab" data-action="openNewTrip">+ Trip mới</div></div>`;
+  html += `<div class="tab add-tab" data-action="openNewTrip">+ Trip mới</div></div>`;
 
   if (!trip && trips.length === 0) {
     html += `<p class="empty">Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.</p>`;
@@ -348,12 +553,17 @@ function render() {
   if (trip) {
     const expenses = getExpensesForTrip(trip.trip_id);
 
-    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.5rem;">
-      <h2 style="font-size:16px; margin:0;">${escapeHtml(trip.name)}</h2>
+    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
+      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}</h2>
       <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa tên trip">✏️</button>
     </div>`;
 
-    html += `<div class="card"><div class="label">Thành viên</div><div class="row" style="margin-bottom:10px;">`;
+    html += `<div class="card">
+      <div class="card-head"><span class="card-title">Thành viên</span></div>
+      <div class="row" style="margin-bottom:12px;">`;
+    if (trip.members.length === 0) {
+      html += `<span style="font-size:13px; color:var(--text-muted);">Chưa có thành viên nào.</span>`;
+    }
     trip.members.forEach(m => {
       const hasExpenses = expenses.some(e => e.paidBy === m);
       html += `<span class="member-tag">${escapeHtml(m)}<button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button></span>`;
@@ -363,10 +573,11 @@ function render() {
       <button onclick="window.app.addMember()">Thêm</button>
     </div></div>`;
 
-    html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
-      <div class="label" style="margin-bottom:0;">Chi tiêu (${expenses.length})</div>
-      <button class="primary" ${trip.members.length === 0 ? 'disabled' : ''} data-action="openAddExpense">+ Thêm chi tiêu</button>
-    </div>`;
+    html += `<div class="card">
+      <div class="card-head">
+        <span class="card-title">Chi tiêu · ${expenses.length}</span>
+        <button class="primary" ${trip.members.length === 0 ? 'disabled' : ''} data-action="openAddExpense">+ Thêm chi tiêu</button>
+      </div>`;
 
     if (trip.members.length === 0) {
       html += `<p class="empty">Thêm thành viên trước khi ghi chi tiêu.</p>`;
@@ -377,44 +588,55 @@ function render() {
       expenses.forEach(e => {
         total += e.amount;
         html += `<div class="expense-row">
-          <div>
+          <div class="expense-main">
             <span class="cat-badge">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
-            <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
+            <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
           </div>
-          <div class="row" style="gap:6px;">
+          <div class="row" style="gap:0; flex-wrap:nowrap;">
             <span class="amount">${fmt(e.amount)}</span>
-            <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
-            <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
+            <div class="expense-actions">
+              <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
+              <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
+            </div>
           </div>
         </div>`;
       });
-      html += `<div class="total-line">Tổng chi: <strong style="color:var(--text-primary)">${fmt(total)}</strong></div>`;
+      html += `<div class="total-line">Tổng chi <strong style="color:var(--text-primary)">${fmt(total)}</strong></div>`;
     }
     html += `</div>`;
+
+    if (trip.members.length > 0 && expenses.length > 0) {
+      html += renderCategoryChart(expenses);
+    }
 
     if (trip.members.length > 0) {
       const balances = computeBalances(trip.members, expenses);
       const settlements = simplifyDebts(balances);
 
-      html += `<div class="card"><div class="label">Số dư từng người</div>`;
+      html += `<div class="card">
+        <div class="card-head"><span class="card-title">Số dư từng người</span></div>`;
       trip.members.forEach(m => {
         const bal = Math.round(balances[m] || 0);
-        const cls = bal > 0 ? 'balance-pos' : bal < 0 ? 'balance-neg' : '';
+        const cls = bal > 100 ? 'balance-pos' : bal < -100 ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
-        const note = bal > 100 ? 'sẽ được nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
-        html += `<div class="balance-row"><span>${escapeHtml(m)}</span><span class="${cls}">${sign}${fmt(bal)} <span style="color:var(--text-muted); font-size:12px;">(${note})</span></span></div>`;
+        const note = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
+        html += `<div class="balance-row">
+          <span class="balance-name">${escapeHtml(m)}</span>
+          <span class="balance-amt ${cls}">${sign}${fmt(bal)}<span class="balance-note">${note}</span></span>
+        </div>`;
       });
       html += `</div>`;
 
-      html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
-        <div class="label" style="margin-bottom:0;">Kết quả chia tiền</div>
-        <button data-action="copySummary">📋 Copy để gửi</button>
-      </div>`;
+      html += `<div class="card">
+        <div class="card-head">
+          <span class="card-title">Kết quả chia tiền</span>
+          <button data-action="copySummary">📋 Copy để gửi</button>
+        </div>`;
       if (settlements.length === 0) {
         html += `<p class="empty">Mọi người đã hòa sổ, không cần chuyển tiền.</p>`;
       } else {
         settlements.forEach(s => {
-          html += `<div class="settlement-row"><strong>${escapeHtml(s.from)}</strong> → <strong>${escapeHtml(s.to)}</strong><span class="spacer"></span><strong>${fmt(s.amount)}</strong></div>`;
+          html += `<div class="settlement-row"><strong>${escapeHtml(s.from)}</strong> <span class="settlement-arrow">→</span> <strong>${escapeHtml(s.to)}</strong><span class="spacer"></span><strong>${fmt(s.amount)}</strong></div>`;
         });
       }
       html += `</div>`;
@@ -625,8 +847,9 @@ function renderModal() {
         </div>
       </div>
       <div class="field">
-        <label>Số tiền (VNĐ)</label>
-        <input id="amountInput" type="number" placeholder="450000" value="${expDraft.amount}">
+        <label>Số tiền <span style="color:var(--text-muted); font-weight:400;">(đơn vị: ngàn đồng)</span></label>
+        <input id="amountInput" type="number" step="any" placeholder="ví dụ 90 = 90.000đ" value="${expDraft.amount ? (parseFloat(expDraft.amount) / 1000) : ''}">
+        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmt(parseFloat(expDraft.amount)) : ''}</div>
       </div>
       <div class="field">
         <label>Mô tả <span style="color:var(--text-muted); font-weight:400;">(không bắt buộc)</span></label>
@@ -670,7 +893,12 @@ function renderModal() {
     document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
     document.getElementById('dateInput').addEventListener('input', e => expDraft.date = e.target.value);
     document.getElementById('timeInput').addEventListener('input', e => expDraft.time = e.target.value);
-    document.getElementById('amountInput').addEventListener('input', e => expDraft.amount = e.target.value);
+    document.getElementById('amountInput').addEventListener('input', e => {
+      const typed = parseFloat(e.target.value);
+      expDraft.amount = isNaN(typed) ? '' : String(typed * 1000);
+      const preview = document.getElementById('amountPreview');
+      if (preview) preview.textContent = !isNaN(typed) && typed > 0 ? '= ' + fmt(typed * 1000) : '';
+    });
     document.getElementById('descInput').addEventListener('input', e => expDraft.desc = e.target.value);
     document.getElementById('categorySelect').addEventListener('change', e => expDraft.category = e.target.value);
     overlay.querySelectorAll('[data-toggle-member]').forEach(el => {
