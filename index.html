@@ -1089,7 +1089,7 @@ function handleAction(e) {
     expDraft = {
       id: null,
       paidBy: trip.members[0] || '',
-      amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [],
+      amount: '', currency: trip.foreignCurrency || '', amountInputRaw: '', desc: '', splitWith: [],
       date: now.toISOString().slice(0, 10),
       time: nowTimeStr(),
       category: '',
