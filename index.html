@@ -71,9 +71,7 @@
   }
   h1 {
     font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
-    display: flex; flex-direction: column; line-height: 1.25;
   }
-  h1 .sub { font-size: 11px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.02em; text-transform: uppercase; }
 
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
@@ -220,7 +218,6 @@
   .cat-badge {
     display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600;
     padding: 3px 8px; border-radius: 6px; margin-right: 7px;
-    background: var(--accent-2-bg); color: var(--accent-2-text);
     text-transform: uppercase; letter-spacing: 0.02em;
   }
 
@@ -283,8 +280,13 @@
 <div class="wrap">
   <div class="app-header">
     <div class="brand">
-      <div class="brand-mark">B</div>
-      <h1>Trip Split<span class="sub">Bryan in data</span></h1>
+      <div class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 10h13l-3.5-3.5"/>
+          <path d="M17 16H4l3.5 3.5"/>
+        </svg>
+      </div>
+      <h1>Trip Split</h1>
     </div>
     <span id="syncDot" class="sync-dot" title="Trạng thái đồng bộ"></span>
   </div>
@@ -311,11 +313,11 @@ function escapeHtml(s) {
 function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
 
 const CATEGORIES = [
-  { id: '', label: 'Khác', color: '#9295B0' },
-  { id: 'food', label: 'Ăn uống', color: '#8B5CF6' },
-  { id: 'transport', label: 'Di chuyển', color: '#4A6CF7' },
-  { id: 'stay', label: 'Chỗ ở', color: '#1A1A2E' },
-  { id: 'activity', label: 'Vui chơi', color: '#D6453A' },
+  { id: '', label: 'Khác', color: '#9295B0', bg: '#EEEFF5', text: '#5F6275' },
+  { id: 'food', label: 'Ăn uống', color: '#E8833A', bg: '#FCEEE1', text: '#A85A1F' },
+  { id: 'transport', label: 'Di chuyển', color: '#3266E0', bg: '#E8EDFC', text: '#2348AD' },
+  { id: 'stay', label: 'Chỗ ở', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
+  { id: 'activity', label: 'Vui chơi', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
 ];
 function categoryLabel(id) {
   const found = CATEGORIES.find(c => c.id === id);
@@ -324,6 +326,12 @@ function categoryLabel(id) {
 function categoryColor(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.color : '#9295B0';
+}
+function categoryBadgeStyle(id) {
+  const found = CATEGORIES.find(c => c.id === id);
+  const bg = found ? found.bg : '#EEEFF5';
+  const text = found ? found.text : '#5F6275';
+  return `background:${bg}; color:${text};`;
 }
 function nowTimeStr() {
   const d = new Date();
@@ -589,7 +597,7 @@ function render() {
         total += e.amount;
         html += `<div class="expense-row">
           <div class="expense-main">
-            <span class="cat-badge">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
+            <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
             <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
           </div>
           <div class="row" style="gap:0; flex-wrap:nowrap;">
