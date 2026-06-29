@@ -324,6 +324,25 @@ function escapeHtml(s) {
 }
 function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
 
+const CURRENCIES = [
+  { code: 'USD', symbol: '$', name: 'USD' },
+  { code: 'JPY', symbol: '¥', name: 'JPY' },
+  { code: 'EUR', symbol: '€', name: 'EUR' },
+  { code: 'THB', symbol: '฿', name: 'THB' },
+  { code: 'KRW', symbol: '₩', name: 'KRW' },
+  { code: 'SGD', symbol: 'S$', name: 'SGD' },
+  { code: 'CNY', symbol: '¥', name: 'CNY' },
+  { code: 'TWD', symbol: 'NT$', name: 'TWD' },
+  { code: 'AUD', symbol: 'A$', name: 'AUD' },
+  { code: 'GBP', symbol: '£', name: 'GBP' },
+];
+function currencySymbol(code) {
+  const found = CURRENCIES.find(c => c.code === code);
+  return found ? found.symbol : code;
+}
+// Quy đổi 1 expense sang VNĐ để dùng cho mọi tính toán (settlement, balance, chart...).
+// amount luôn lưu số tiền gốc theo currency của dòng đó; trip.exchangeRate là tỷ giá
+// 1 đơn vị ngoại tệ = bao nhiêu VNĐ, áp dụng chung cho cả trip.
 const CATEGORIES = [
   { id: '', label: 'Khác', color: '#9295B0', bg: '#EEEFF5', text: '#5F6275' },
   { id: 'food', label: 'Ăn uống', color: '#E8833A', bg: '#FCEEE1', text: '#A85A1F' },
@@ -355,8 +374,9 @@ function computeCategoryTotals(expenses) {
   let grandTotal = 0;
   expenses.forEach(e => {
     const key = e.category || '';
-    totals[key] = (totals[key] || 0) + e.amount;
-    grandTotal += e.amount;
+    const amt = e.amountVND ?? e.amount;
+    totals[key] = (totals[key] || 0) + amt;
+    grandTotal += amt;
   });
   const rows = Object.entries(totals)
     .map(([cat, amt]) => ({ cat, amt, pct: grandTotal > 0 ? amt / grandTotal : 0 }))
@@ -618,8 +638,9 @@ function computeBalances(members, expenses) {
   members.forEach(m => balances[m] = 0);
   expenses.forEach(exp => {
     const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
-    const share = exp.amount / splitMembers.length;
-    balances[exp.paidBy] = (balances[exp.paidBy] || 0) + exp.amount;
+    const amt = exp.amountVND ?? exp.amount;
+    const share = amt / splitMembers.length;
+    balances[exp.paidBy] = (balances[exp.paidBy] || 0) + amt;
     splitMembers.forEach(m => { balances[m] = (balances[m] || 0) - share; });
   });
   return balances;
@@ -668,10 +689,16 @@ let rawTrips = [];     // raw rows từ Sheet Trips
 let rawExpenses = [];  // raw rows từ Sheet Expenses
 let activeTripId = null;
 let modal = null;
-let expDraft = { id: null, paidBy: '', amount: '', desc: '', splitWith: [], date: '', time: '', category: '' };
+let expDraft = { id: null, paidBy: '', amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [], date: '', time: '', category: '' };
 let memberInput = '';
 let newTripName = '';
+let newTripUseForeign = false;
+let newTripCurrency = 'USD';
+let newTripRate = '';
 let renameTripDraft = '';
+let renameTripUseForeign = false;
+let renameTripCurrency = 'USD';
+let renameTripRate = '';
 let editMemberDraft = { oldName: '', newName: '' };
 let expenseFilter = { person: '', category: '' };
 let showArchivedList = false;
@@ -703,21 +730,30 @@ function getTripObjects() {
     name: t.trip_name,
     members: parseMembers(t.members),
     archived: t.archived === 'true' || t.archived === true,
+    foreignCurrency: t.foreign_currency || '',
+    exchangeRate: t.exchange_rate || '',
   }));
 }
-function getExpensesForTrip(tripId) {
+function getExpensesForTrip(trip) {
   return rawExpenses
-    .filter(e => e.trip_id === tripId)
-    .map(e => ({
-      id: e.expense_id,
-      paidBy: e.paid_by,
-      amount: Number(e.amount),
-      desc: e.desc,
-      splitWith: parseMembers(e.split_with),
-      date: e.date,
-      time: e.time || '',
-      category: e.category || '',
-    }))
+    .filter(e => e.trip_id === trip.trip_id)
+    .map(e => {
+      const currency = e.currency || '';
+      const amount = Number(e.amount);
+      const rate = currency ? (parseFloat(trip.exchangeRate) || 0) : 1;
+      return {
+        id: e.expense_id,
+        paidBy: e.paid_by,
+        amount,
+        currency,
+        amountVND: currency ? amount * rate : amount,
+        desc: e.desc,
+        splitWith: parseMembers(e.split_with),
+        date: e.date,
+        time: e.time || '',
+        category: e.category || '',
+      };
+    })
     .sort((a, b) => {
       const ak = a.date + ' ' + (a.time || '00:00');
       const bk = b.date + ' ' + (b.time || '00:00');
@@ -804,11 +840,11 @@ function render() {
   }
 
   if (trip) {
-    const expenses = getExpensesForTrip(trip.trip_id);
+    const expenses = getExpensesForTrip(trip);
 
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
       <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}${trip.archived ? ' <span style="font-size:11px; color:var(--text-muted); font-weight:500;">(đã lưu trữ)</span>' : ''}</h2>
-      <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa tên trip">✏️</button>
+      <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa trip" title="Sửa tên / ngoại tệ">✏️</button>
     </div>`;
 
     html += `<div class="card">
@@ -862,14 +898,17 @@ function render() {
       } else {
         let filteredTotal = 0;
         filtered.forEach(e => {
-          filteredTotal += e.amount;
+          filteredTotal += e.amountVND;
+          const isForeign = !!e.currency;
           html += `<div class="expense-row">
             <div class="expense-main">
               <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
               <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
-              <span class="amount">${fmt(e.amount)}</span>
+              <span class="amount">${isForeign
+                ? `${e.amount.toLocaleString('vi-VN')}${currencySymbol(e.currency)}<span style="display:block; font-size:11px; color:var(--text-muted); font-weight:400; text-align:right;">≈ ${fmt(e.amountVND)}</span>`
+                : fmt(e.amountVND)}</span>
               <div class="expense-actions">
                 <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
                 <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
@@ -987,6 +1026,9 @@ function handleAction(e) {
   if (action === 'openRenameTrip') {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
+    renameTripUseForeign = !!trip.foreign_currency;
+    renameTripCurrency = trip.foreign_currency || 'USD';
+    renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
     modal = 'renameTrip'; render();
   }
 
@@ -1047,7 +1089,7 @@ function handleAction(e) {
     expDraft = {
       id: null,
       paidBy: trip.members[0] || '',
-      amount: '', desc: '', splitWith: [],
+      amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [],
       date: now.toISOString().slice(0, 10),
       time: nowTimeStr(),
       category: '',
@@ -1057,10 +1099,14 @@ function handleAction(e) {
 
   if (action === 'editExpense') {
     const exp = rawExpenses.find(ex => ex.expense_id === id);
+    const currency = exp.currency || '';
+    const amountNum = Number(exp.amount);
     expDraft = {
       id: exp.expense_id,
       paidBy: exp.paid_by,
       amount: String(exp.amount),
+      currency,
+      amountInputRaw: currency ? String(amountNum) : String(amountNum / 1000),
       desc: exp.desc,
       splitWith: parseMembers(exp.split_with),
       date: exp.date,
@@ -1093,7 +1139,7 @@ function handleAction(e) {
 
   if (action === 'exportImage') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const expenses = getExpensesForTrip(trip.trip_id);
+    const expenses = getExpensesForTrip(trip);
     const balances = computeBalances(trip.members, expenses);
     const settlements = simplifyDebts(balances);
     generateSummaryImage(trip, expenses, balances, settlements);
@@ -1101,7 +1147,7 @@ function handleAction(e) {
 
   if (action === 'exportCsv') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const expenses = getExpensesForTrip(trip.trip_id);
+    const expenses = getExpensesForTrip(trip);
     const balances = computeBalances(trip.members, expenses);
     const settlements = simplifyDebts(balances);
 
@@ -1114,11 +1160,11 @@ function handleAction(e) {
     }
 
     let rows = [];
-    rows.push(['Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả', 'Số tiền (VNĐ)', 'Chia cho']);
+    rows.push(['Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả', 'Số tiền gốc', 'Đơn vị', 'Số tiền (VNĐ)', 'Chia cho']);
     expenses.slice().reverse().forEach(ex => {
       rows.push([
         ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
-        ex.desc || '', Math.round(ex.amount),
+        ex.desc || '', ex.amount, ex.currency || 'VNĐ', Math.round(ex.amountVND),
         ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm',
       ]);
     });
@@ -1150,12 +1196,15 @@ function handleAction(e) {
 
   if (action === 'copySummary') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const expenses = getExpensesForTrip(trip.trip_id);
+    const expenses = getExpensesForTrip(trip);
     const balances = computeBalances(trip.members, expenses);
     const settlements = simplifyDebts(balances);
     let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
     expenses.slice().reverse().forEach(ex => {
-      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${fmt(ex.amount)}${ex.desc ? ' cho ' + ex.desc : ''}\n`;
+      const amountText = ex.currency
+        ? `${ex.amount.toLocaleString('vi-VN')}${currencySymbol(ex.currency)} (≈${fmt(ex.amountVND)})`
+        : fmt(ex.amountVND);
+      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${amountText}${ex.desc ? ' cho ' + ex.desc : ''}\n`;
     });
     text += '\nSố dư từng người:\n';
     trip.members.forEach(m => {
@@ -1184,6 +1233,28 @@ function renderModal() {
         <label>Tên trip</label>
         <input id="newTripInput" placeholder="Ví dụ: Đà Lạt 2026" value="${escapeHtml(newTripName)}">
       </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="useForeignCheckbox" ${newTripUseForeign ? 'checked' : ''} style="width:auto; height:auto;">
+          Trip này có chi tiêu bằng ngoại tệ
+        </label>
+      </div>
+      ${newTripUseForeign ? `
+      <div class="row" style="gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>Đơn vị ngoại tệ</label>
+          <select id="newTripCurrencySelect">
+            ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="flex:1;">
+          <label>1 ${escapeHtml(newTripCurrency)} = ? đ</label>
+          <input id="newTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(newTripRate)}">
+        </div>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
+        Tỷ giá áp dụng chung cho cả trip, có thể sửa lại sau trong phần sửa tên trip.
+      </div>` : ''}
       <div class="row" style="justify-content:flex-end;">
         <button onclick="window.app.closeModal()">Hủy</button>
         <button class="primary" onclick="window.app.createTrip()">Tạo</button>
@@ -1193,11 +1264,33 @@ function renderModal() {
 
   if (modal === 'renameTrip') {
     overlay.innerHTML = `<div class="modal">
-      <h2>Sửa tên trip</h2>
+      <h2>Sửa trip</h2>
       <div class="field">
         <label>Tên trip</label>
         <input id="renameTripInput" value="${escapeHtml(renameTripDraft)}">
       </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="useForeignCheckbox2" ${renameTripUseForeign ? 'checked' : ''} style="width:auto; height:auto;">
+          Trip này có chi tiêu bằng ngoại tệ
+        </label>
+      </div>
+      ${renameTripUseForeign ? `
+      <div class="row" style="gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>Đơn vị ngoại tệ</label>
+          <select id="renameTripCurrencySelect">
+            ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === renameTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="flex:1;">
+          <label>1 ${escapeHtml(renameTripCurrency)} = ? đ</label>
+          <input id="renameTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(renameTripRate)}">
+        </div>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
+        Đổi tỷ giá sẽ áp dụng lại cho mọi chi tiêu ngoại tệ đã ghi trong trip này.
+      </div>` : ''}
       <div class="row" style="justify-content:flex-end;">
         <button onclick="window.app.closeModal()">Hủy</button>
         <button class="primary" onclick="window.app.renameTrip()">Lưu</button>
@@ -1225,6 +1318,8 @@ function renderModal() {
   if (modal === 'addExpense') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const isEditing = !!expDraft.id;
+    const hasForeign = !!trip.foreignCurrency;
+    const isForeign = expDraft.currency === trip.foreignCurrency && hasForeign;
     overlay.innerHTML = `<div class="modal">
       <h2>${isEditing ? 'Sửa chi tiêu' : 'Thêm chi tiêu'}</h2>
       <div class="field">
@@ -1243,10 +1338,21 @@ function renderModal() {
           <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
         </div>
       </div>
+      ${hasForeign ? `
       <div class="field">
-        <label>Số tiền <span style="color:var(--text-muted); font-weight:400;">(đơn vị: ngàn đồng)</span></label>
-        <input id="amountInput" type="number" step="any" placeholder="ví dụ 90 = 90.000đ" value="${expDraft.amount ? (parseFloat(expDraft.amount) / 1000) : ''}">
-        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmt(parseFloat(expDraft.amount)) : ''}</div>
+        <label>Đơn vị tiền</label>
+        <div class="row">
+          <span class="pill ${!isForeign ? 'active' : ''}" data-set-currency="">VNĐ</span>
+          <span class="pill ${isForeign ? 'active' : ''}" data-set-currency="${escapeHtml(trip.foreignCurrency)}">${escapeHtml(trip.foreignCurrency)} (${currencySymbol(trip.foreignCurrency)})</span>
+        </div>
+      </div>` : ''}
+      <div class="field">
+        <label>Số tiền ${isForeign
+          ? `<span style="color:var(--text-muted); font-weight:400;">(đơn vị: ${escapeHtml(trip.foreignCurrency)})</span>`
+          : `<span style="color:var(--text-muted); font-weight:400;">(đơn vị: ngàn đồng)</span>`}
+        </label>
+        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? 'ví dụ 5000' : 'ví dụ 90 = 90.000đ'}" value="${expDraft.amountInputRaw}">
+        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmt(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount)) : ''}</div>
       </div>
       <div class="field">
         <label>Mô tả <span style="color:var(--text-muted); font-weight:400;">(không bắt buộc)</span></label>
@@ -1279,12 +1385,26 @@ function renderModal() {
     inp.addEventListener('input', e => newTripName = e.target.value);
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.createTrip(); });
     inp.focus();
+
+    const useForeignCb = document.getElementById('useForeignCheckbox');
+    if (useForeignCb) useForeignCb.addEventListener('change', e => { newTripUseForeign = e.target.checked; renderModal(); });
+    const curSelect = document.getElementById('newTripCurrencySelect');
+    if (curSelect) curSelect.addEventListener('change', e => { newTripCurrency = e.target.value; renderModal(); });
+    const rateInput = document.getElementById('newTripRateInput');
+    if (rateInput) rateInput.addEventListener('input', e => newTripRate = e.target.value);
   }
   if (modal === 'renameTrip') {
     const inp = document.getElementById('renameTripInput');
     inp.addEventListener('input', e => renameTripDraft = e.target.value);
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.renameTrip(); });
     inp.focus();
+
+    const useForeignCb2 = document.getElementById('useForeignCheckbox2');
+    if (useForeignCb2) useForeignCb2.addEventListener('change', e => { renameTripUseForeign = e.target.checked; renderModal(); });
+    const curSelect2 = document.getElementById('renameTripCurrencySelect');
+    if (curSelect2) curSelect2.addEventListener('change', e => { renameTripCurrency = e.target.value; renderModal(); });
+    const rateInput2 = document.getElementById('renameTripRateInput');
+    if (rateInput2) rateInput2.addEventListener('input', e => renameTripRate = e.target.value);
   }
   if (modal === 'editMember') {
     const inp = document.getElementById('editMemberInput');
@@ -1294,15 +1414,42 @@ function renderModal() {
     inp.select();
   }
   if (modal === 'addExpense') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
     document.getElementById('dateInput').addEventListener('input', e => expDraft.date = e.target.value);
     document.getElementById('timeInput').addEventListener('input', e => expDraft.time = e.target.value);
-    document.getElementById('amountInput').addEventListener('input', e => {
-      const typed = parseFloat(e.target.value);
-      expDraft.amount = isNaN(typed) ? '' : String(typed * 1000);
+
+    function updateAmountFromRaw() {
+      const isForeign = expDraft.currency === trip.foreignCurrency && !!trip.foreignCurrency;
+      const typed = parseFloat(expDraft.amountInputRaw);
+      if (isNaN(typed)) {
+        expDraft.amount = '';
+      } else {
+        expDraft.amount = isForeign ? String(typed) : String(typed * 1000);
+      }
       const preview = document.getElementById('amountPreview');
-      if (preview) preview.textContent = !isNaN(typed) && typed > 0 ? '= ' + fmt(typed * 1000) : '';
+      if (preview) {
+        if (isNaN(typed) || typed <= 0) {
+          preview.textContent = '';
+        } else {
+          const vnd = isForeign ? typed * (parseFloat(trip.exchangeRate) || 0) : typed * 1000;
+          preview.textContent = '= ' + fmt(vnd);
+        }
+      }
+    }
+
+    document.getElementById('amountInput').addEventListener('input', e => {
+      expDraft.amountInputRaw = e.target.value;
+      updateAmountFromRaw();
     });
+
+    overlay.querySelectorAll('[data-set-currency]').forEach(el => {
+      el.addEventListener('click', () => {
+        expDraft.currency = el.dataset.setCurrency;
+        renderModal();
+      });
+    });
+
     document.getElementById('descInput').addEventListener('input', e => expDraft.desc = e.target.value);
     document.getElementById('categorySelect').addEventListener('change', e => expDraft.category = e.target.value);
     overlay.querySelectorAll('[data-toggle-member]').forEach(el => {
@@ -1339,24 +1486,49 @@ window.app = {
     const name = newTripName.trim();
     if (!name) return;
     const id = uid();
+    const foreignCurrency = newTripUseForeign ? newTripCurrency : '';
+    const exchangeRate = newTripUseForeign ? (parseFloat(newTripRate) || '') : '';
     modal = null;
     withSaving(
       () => {
-        rawTrips.push({ trip_id: id, trip_name: name, members: '' });
+        rawTrips.push({ trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate });
         activeTripId = id;
       },
-      () => apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '' })
+      () => apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate })
     );
+    newTripUseForeign = false;
+    newTripCurrency = 'USD';
+    newTripRate = '';
   },
 
   renameTrip() {
     const name = renameTripDraft.trim();
     if (!name) return;
-    modal = null;
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    const oldCurrency = trip.foreign_currency || '';
+    const newCurrency = renameTripUseForeign ? renameTripCurrency : '';
+    const newRate = renameTripUseForeign ? (parseFloat(renameTripRate) || '') : '';
+
+    // Nếu trip đã có chi tiêu dùng ngoại tệ cũ, không cho đổi sang mã khác
+    // (vì các dòng cũ vẫn lưu currency cũ, đổi mã sẽ làm sai lệch quy đổi VNĐ).
+    if (oldCurrency && newCurrency && oldCurrency !== newCurrency) {
+      const hasOldCurrencyExpenses = rawExpenses.some(e => e.trip_id === activeTripId && e.currency === oldCurrency);
+      if (hasOldCurrencyExpenses) {
+        showToast(`Trip đã có chi tiêu bằng ${oldCurrency}, không thể đổi sang ${newCurrency}`);
+        return;
+      }
+    }
+
+    modal = null;
     withSaving(
-      () => { trip.trip_name = name; },
-      () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name })
+      () => {
+        trip.trip_name = name;
+        trip.foreign_currency = newCurrency;
+        trip.exchange_rate = newRate;
+      },
+      () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name }).then(() =>
+        apiPost({ action: 'setTripCurrency', trip_id: activeTripId, foreign_currency: newCurrency, exchange_rate: newRate })
+      )
     );
   },
 
@@ -1423,6 +1595,7 @@ window.app = {
       trip_id: activeTripId,
       paid_by: expDraft.paidBy,
       amount: amt,
+      currency: expDraft.currency || '',
       desc: expDraft.desc.trim(),
       split_with: expDraft.splitWith.join(','),
       date: expDraft.date,
