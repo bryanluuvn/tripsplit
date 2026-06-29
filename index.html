@@ -672,16 +672,21 @@ function simplifyDebts(balances) {
 async function apiGet() {
   const res = await fetch(API_URL);
   if (!res.ok) throw new Error('GET failed');
-  return res.json();
+  const json = await res.json();
+  console.log('[DEBUG apiGet response trips]', JSON.stringify(json.trips));
+  return json;
 }
 async function apiPost(payload) {
+  console.log('[DEBUG apiPost request]', JSON.stringify(payload));
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('POST failed');
-  return res.json();
+  const json = await res.json();
+  console.log('[DEBUG apiPost response]', JSON.stringify(json));
+  return json;
 }
 
 // ---- State ----
@@ -1488,6 +1493,7 @@ window.app = {
     const id = uid();
     const foreignCurrency = newTripUseForeign ? newTripCurrency : '';
     const exchangeRate = newTripUseForeign ? (parseFloat(newTripRate) || '') : '';
+    console.log('[DEBUG createTrip]', { newTripUseForeign, newTripCurrency, newTripRate, foreignCurrency, exchangeRate });
     modal = null;
     withSaving(
       () => {
