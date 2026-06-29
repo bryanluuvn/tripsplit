@@ -378,7 +378,7 @@ function render() {
         total += e.amount;
         html += `<div class="expense-row">
           <div>
-            <span class="cat-badge">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong> trả cho ${escapeHtml(e.desc)}
+            <span class="cat-badge">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
             <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
           </div>
           <div class="row" style="gap:6px;">
@@ -553,7 +553,7 @@ function handleAction(e) {
     const settlements = simplifyDebts(balances);
     let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
     expenses.slice().reverse().forEach(ex => {
-      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${fmt(ex.amount)} cho ${ex.desc}\n`;
+      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${fmt(ex.amount)}${ex.desc ? ' cho ' + ex.desc : ''}\n`;
     });
     text += '\nSố dư từng người:\n';
     trip.members.forEach(m => {
@@ -629,7 +629,7 @@ function renderModal() {
         <input id="amountInput" type="number" placeholder="450000" value="${expDraft.amount}">
       </div>
       <div class="field">
-        <label>Mô tả</label>
+        <label>Mô tả <span style="color:var(--text-muted); font-weight:400;">(không bắt buộc)</span></label>
         <input id="descInput" placeholder="Ăn tối, taxi, khách sạn..." value="${escapeHtml(expDraft.desc)}">
       </div>
       <div class="field">
@@ -730,7 +730,7 @@ window.app = {
 
   submitExpense() {
     const amt = parseFloat(expDraft.amount);
-    if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.desc.trim() || !expDraft.date) {
+    if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.date) {
       showToast('Điền đủ thông tin trước khi lưu');
       return;
     }
