@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Trip Split - Chia tiền trip</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #F8F9FF;
+    --surface: #FFFFFF;
+    --surface-2: #F1F2FA;
+    --border: #E1E3F0;
+    --border-strong: #C7CAE6;
+    --text-primary: #1A1A2E;
+    --text-secondary: #5C5E78;
+    --text-muted: #8A8CA8;
+    --accent: #4A6CF7;
+    --accent-bg: #EDF0FE;
+    --accent-text: #2F4FD8;
+    --danger: #D8473B;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    padding: 1rem;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 1rem; display: flex; align-items: center; gap: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  input, select {
+    height: 38px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 0 10px;
+    font-size: 15px;
+    background: var(--surface);
+    color: var(--text-primary);
+    width: 100%;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    height: 38px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 0 14px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--surface-2); }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+  button.primary:hover { background: #3D5DE0; }
+  button.ghost { border: none; background: none; color: var(--text-muted); padding: 4px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .pill.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
+  .member-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border-radius: 20px; padding: 5px 6px 5px 12px; font-size: 14px;
+  }
+  .member-tag button { height: auto; border: none; background: none; padding: 2px; font-size: 14px; color: var(--text-muted); }
+  .expense-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .expense-row:last-child { border-bottom: none; }
+  .expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .amount { font-weight: 600; }
+  .settlement-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 14px; }
+  .settlement-row .spacer { flex: 1; }
+  .empty { color: var(--text-muted); font-size: 14px; padding: 0.5rem 0; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(26,26,46,0.5);
+    display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50;
+  }
+  .modal {
+    background: var(--surface); border-radius: 14px; padding: 1.25rem;
+    width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 16px; margin: 0 0 12px; }
+  .field { margin-bottom: 12px; }
+  .field label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .tab {
+    padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-strong);
+    background: var(--surface); font-size: 14px; cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--text-primary); color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; z-index: 100;
+  }
+  .total-line { text-align: right; font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+  .danger-link { color: var(--danger); font-size: 13px; background: none; border: none; padding: 4px 0; cursor: pointer; }
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #888; display: inline-block;
+  }
+  .sync-dot.ok { background: #2DB36B; }
+  .sync-dot.error { background: var(--danger); }
+  .setup-banner {
+    background: #FFF4E5; border: 1px solid #F0C36B; border-radius: var(--radius);
+    padding: 12px; font-size: 13px; margin-bottom: 1rem; color: #6B4E14;
+  }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trip Split <span id="syncDot" class="sync-dot" title="Trạng thái đồng bộ"></span></h1>
+  <div id="app"></div>
+</div>
+
+<script>
+/* ====== CẤU HÌNH - DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycby_YCMUQ0o9zzYbk1zttsYKsktK3tQk8ddxcXFiJfzdedxL_J-2wEnEb3wvXM36OupBHQ/exec';
+/* ============================================================= */
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+function fmt(n) { return Math.round(n).toLocaleString('vi-VN') + 'đ'; }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
+
+function computeBalances(members, expenses) {
+  const balances = {};
+  members.forEach(m => balances[m] = 0);
+  expenses.forEach(exp => {
+    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
+    const share = exp.amount / splitMembers.length;
+    balances[exp.paidBy] = (balances[exp.paidBy] || 0) + exp.amount;
+    splitMembers.forEach(m => { balances[m] = (balances[m] || 0) - share; });
+  });
+  return balances;
+}
+
+function simplifyDebts(balances) {
+  const creditors = [], debtors = [];
+  Object.entries(balances).forEach(([name, amt]) => {
+    const r = Math.round(amt);
+    if (r > 100) creditors.push({ name, amt: r });
+    else if (r < -100) debtors.push({ name, amt: -r });
+  });
+  creditors.sort((a,b) => b.amt - a.amt);
+  debtors.sort((a,b) => b.amt - a.amt);
+  const settlements = [];
+  let ci = 0, di = 0;
+  while (ci < creditors.length && di < debtors.length) {
+    const c = creditors[ci], d = debtors[di];
+    const amt = Math.min(c.amt, d.amt);
+    if (amt > 100) settlements.push({ from: d.name, to: c.name, amount: amt });
+    c.amt -= amt; d.amt -= amt;
+    if (c.amt <= 100) ci++;
+    if (d.amt <= 100) di++;
+  }
+  return settlements;
+}
+
+// ---- API layer ----
+async function apiGet() {
+  const res = await fetch(API_URL);
+  if (!res.ok) throw new Error('GET failed');
+  return res.json();
+}
+async function apiPost(payload) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('POST failed');
+  return res.json();
+}
+
+// ---- State ----
+let rawTrips = [];     // raw rows từ Sheet Trips
+let rawExpenses = [];  // raw rows từ Sheet Expenses
+let activeTripId = null;
+let modal = null;
+let expDraft = { paidBy: '', amount: '', desc: '', splitWith: [] };
+let memberInput = '';
+let newTripName = '';
+let isLoading = true;
+let isSaving = false;
+let loadError = null;
+let pollTimer = null;
+let toastTimer = null;
+
+function setSyncDot(state) {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  dot.className = 'sync-dot' + (state === 'ok' ? ' ok' : state === 'error' ? ' error' : '');
+  dot.title = state === 'ok' ? 'Đã đồng bộ' : state === 'error' ? 'Lỗi đồng bộ - kiểm tra mạng' : 'Đang đồng bộ...';
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (t) t.remove();
+  t = document.createElement('div');
+  t.id = 'toast'; t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 1800);
+}
+
+function getTripObjects() {
+  return rawTrips.map(t => ({
+    trip_id: t.trip_id,
+    name: t.trip_name,
+    members: parseMembers(t.members),
+  }));
+}
+function getExpensesForTrip(tripId) {
+  return rawExpenses
+    .filter(e => e.trip_id === tripId)
+    .map(e => ({
+      id: e.expense_id,
+      paidBy: e.paid_by,
+      amount: Number(e.amount),
+      desc: e.desc,
+      splitWith: parseMembers(e.split_with),
+      date: e.date,
+    }))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+async function refreshData(showSpinner) {
+  if (showSpinner) setSyncDot('loading');
+  try {
+    const data = await apiGet();
+    rawTrips = data.trips || [];
+    rawExpenses = data.expenses || [];
+    if (!activeTripId && rawTrips.length > 0) activeTripId = rawTrips[0].trip_id;
+    loadError = null;
+    setSyncDot('ok');
+  } catch (err) {
+    loadError = err.message;
+    setSyncDot('error');
+  }
+  isLoading = false;
+  render();
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => refreshData(false), 8000); // tự đồng bộ mỗi 8 giây
+}
+
+function render() {
+  const app = document.getElementById('app');
+
+  if (!API_URL || API_URL === 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+    app.innerHTML = `<div class="setup-banner">
+      Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.
+    </div>`;
+    return;
+  }
+
+  if (isLoading) {
+    app.innerHTML = `<p class="empty"><span class="spinner"></span> Đang tải dữ liệu...</p>`;
+    return;
+  }
+
+  if (loadError) {
+    app.innerHTML = `<div class="setup-banner">Không tải được dữ liệu: ${escapeHtml(loadError)}. <button onclick="window.app.retry()">Thử lại</button></div>`;
+    return;
+  }
+
+  const trips = getTripObjects();
+  const trip = trips.find(t => t.trip_id === activeTripId) || null;
+
+  let html = '<div class="tabs">';
+  trips.forEach(t => {
+    html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
+  });
+  html += `<div class="tab" data-action="openNewTrip">+ Trip mới</div></div>`;
+
+  if (!trip && trips.length === 0) {
+    html += `<p class="empty">Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.</p>`;
+  }
+
+  if (trip) {
+    const expenses = getExpensesForTrip(trip.trip_id);
+
+    html += `<div class="card"><div class="label">Thành viên</div><div class="row" style="margin-bottom:10px;">`;
+    trip.members.forEach(m => {
+      html += `<span class="member-tag">${escapeHtml(m)}<button data-action="removeMember" data-name="${escapeHtml(m)}">✕</button></span>`;
+    });
+    html += `</div><div class="row">
+      <input id="memberInput" placeholder="Tên thành viên" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
+      <button onclick="window.app.addMember()" ${isSaving ? 'disabled' : ''}>Thêm</button>
+    </div></div>`;
+
+    html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
+      <div class="label" style="margin-bottom:0;">Chi tiêu (${expenses.length})</div>
+      <button class="primary" ${trip.members.length === 0 ? 'disabled' : ''} data-action="openAddExpense">+ Thêm chi tiêu</button>
+    </div>`;
+
+    if (trip.members.length === 0) {
+      html += `<p class="empty">Thêm thành viên trước khi ghi chi tiêu.</p>`;
+    } else if (expenses.length === 0) {
+      html += `<p class="empty">Chưa có chi tiêu nào.</p>`;
+    } else {
+      let total = 0;
+      expenses.forEach(e => {
+        total += e.amount;
+        html += `<div class="expense-row">
+          <div>
+            <strong>${escapeHtml(e.paidBy)}</strong> trả cho ${escapeHtml(e.desc)}
+            <div class="expense-meta">${escapeHtml(e.date)} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
+          </div>
+          <div class="row" style="gap:10px;">
+            <span class="amount">${fmt(e.amount)}</span>
+            <button class="ghost" data-action="deleteExpense" data-id="${e.id}">🗑</button>
+          </div>
+        </div>`;
+      });
+      html += `<div class="total-line">Tổng chi: <strong style="color:var(--text-primary)">${fmt(total)}</strong></div>`;
+    }
+    html += `</div>`;
+
+    if (trip.members.length > 0) {
+      const balances = computeBalances(trip.members, expenses);
+      const settlements = simplifyDebts(balances);
+      html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
+        <div class="label" style="margin-bottom:0;">Kết quả chia tiền</div>
+        <button data-action="copySummary">📋 Copy để gửi</button>
+      </div>`;
+      if (settlements.length === 0) {
+        html += `<p class="empty">Mọi người đã hòa sổ, không cần chuyển tiền.</p>`;
+      } else {
+        settlements.forEach(s => {
+          html += `<div class="settlement-row"><strong>${escapeHtml(s.from)}</strong> → <strong>${escapeHtml(s.to)}</strong><span class="spacer"></span><strong>${fmt(s.amount)}</strong></div>`;
+        });
+      }
+      html += `</div>`;
+    }
+
+    html += `<button class="danger-link" data-action="deleteTrip">Xóa trip này</button>`;
+  }
+
+  app.innerHTML = html;
+
+  app.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handleAction));
+  const mi = document.getElementById('memberInput');
+  if (mi) mi.addEventListener('input', e => { memberInput = e.target.value; });
+
+  const existingOverlay = document.getElementById('modalOverlay');
+  if (existingOverlay) existingOverlay.remove();
+  if (modal) renderModal();
+}
+
+async function withSaving(fn) {
+  isSaving = true; setSyncDot('loading');
+  try {
+    await fn();
+    await refreshData(false);
+  } catch (err) {
+    showToast('Lỗi: ' + err.message);
+    setSyncDot('error');
+  }
+  isSaving = false;
+}
+
+function handleAction(e) {
+  const action = e.currentTarget.dataset.action;
+  const id = e.currentTarget.dataset.id;
+  const name = e.currentTarget.dataset.name;
+
+  if (action === 'selectTrip') { activeTripId = id; render(); }
+  if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
+
+  if (action === 'removeMember') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const newMembers = trip.members.filter(m => m !== name);
+    withSaving(() => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newMembers.join(',') }));
+  }
+
+  if (action === 'openAddExpense') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    expDraft = { paidBy: trip.members[0] || '', amount: '', desc: '', splitWith: [] };
+    modal = 'addExpense'; render();
+  }
+
+  if (action === 'deleteExpense') {
+    withSaving(() => apiPost({ action: 'deleteExpense', expense_id: id }));
+  }
+
+  if (action === 'deleteTrip') {
+    if (!confirm('Xóa trip này? Không thể hoàn tác, dữ liệu sẽ mất với mọi người.')) return;
+    withSaving(async () => {
+      await apiPost({ action: 'deleteTrip', trip_id: activeTripId });
+      activeTripId = null;
+    });
+  }
+
+  if (action === 'copySummary') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const expenses = getExpensesForTrip(trip.trip_id);
+    const balances = computeBalances(trip.members, expenses);
+    const settlements = simplifyDebts(balances);
+    let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
+    expenses.slice().reverse().forEach(ex => { text += `${ex.date} ${ex.paidBy} trả ${fmt(ex.amount)} cho ${ex.desc}\n`; });
+    text += '\nKết quả thanh toán:\n';
+    if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
+    else settlements.forEach(s => { text += `${s.from} chuyển ${s.to}: ${fmt(s.amount)}\n`; });
+    navigator.clipboard.writeText(text).then(() => showToast('Đã copy vào clipboard'));
+  }
+}
+
+function renderModal() {
+  let existing = document.getElementById('modalOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'modalOverlay';
+  overlay.className = 'modal-overlay';
+
+  if (modal === 'newTrip') {
+    overlay.innerHTML = `<div class="modal">
+      <h2>Tạo trip mới</h2>
+      <div class="field">
+        <label>Tên trip</label>
+        <input id="newTripInput" placeholder="Ví dụ: Đà Lạt 2026" value="${escapeHtml(newTripName)}">
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button onclick="window.app.closeModal()">Hủy</button>
+        <button class="primary" onclick="window.app.createTrip()" ${isSaving ? 'disabled' : ''}>Tạo</button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'addExpense') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    overlay.innerHTML = `<div class="modal">
+      <h2>Thêm chi tiêu</h2>
+      <div class="field">
+        <label>Ai trả</label>
+        <select id="paidBySelect">
+          ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Số tiền (VNĐ)</label>
+        <input id="amountInput" type="number" placeholder="450000" value="${expDraft.amount}">
+      </div>
+      <div class="field">
+        <label>Mô tả</label>
+        <input id="descInput" placeholder="Ăn tối, taxi, khách sạn..." value="${escapeHtml(expDraft.desc)}">
+      </div>
+      <div class="field">
+        <label>Chia cho (bỏ trống = cả nhóm)</label>
+        <div class="row">
+          ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end; margin-top: 8px;">
+        <button onclick="window.app.closeModal()">Hủy</button>
+        <button class="primary" onclick="window.app.submitExpense()" ${isSaving ? 'disabled' : ''}>Lưu chi tiêu</button>
+      </div>
+    </div>`;
+  }
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) window.app.closeModal(); });
+
+  if (modal === 'newTrip') {
+    const inp = document.getElementById('newTripInput');
+    inp.addEventListener('input', e => newTripName = e.target.value);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.createTrip(); });
+    inp.focus();
+  }
+  if (modal === 'addExpense') {
+    document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
+    document.getElementById('amountInput').addEventListener('input', e => expDraft.amount = e.target.value);
+    document.getElementById('descInput').addEventListener('input', e => expDraft.desc = e.target.value);
+    overlay.querySelectorAll('[data-toggle-member]').forEach(el => {
+      el.addEventListener('click', () => {
+        const m = el.dataset.toggleMember;
+        if (expDraft.splitWith.includes(m)) expDraft.splitWith = expDraft.splitWith.filter(x => x !== m);
+        else expDraft.splitWith.push(m);
+        renderModal();
+      });
+    });
+  }
+}
+
+window.app = {
+  retry() { isLoading = true; render(); refreshData(true); },
+
+  addMember() {
+    const name = memberInput.trim();
+    if (!name) return;
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    if (trip.members.includes(name)) { memberInput = ''; return; }
+    const newMembers = [...trip.members, name];
+    memberInput = '';
+    withSaving(() => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newMembers.join(',') }));
+  },
+
+  closeModal() { modal = null; render(); },
+
+  createTrip() {
+    const name = newTripName.trim();
+    if (!name) return;
+    const id = uid();
+    modal = null;
+    withSaving(async () => {
+      await apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '' });
+      activeTripId = id;
+    });
+  },
+
+  submitExpense() {
+    const amt = parseFloat(expDraft.amount);
+    if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.desc.trim()) {
+      showToast('Điền đủ thông tin trước khi lưu');
+      return;
+    }
+    modal = null;
+    withSaving(() => apiPost({
+      action: 'addExpense',
+      expense_id: uid(),
+      trip_id: activeTripId,
+      paid_by: expDraft.paidBy,
+      amount: amt,
+      desc: expDraft.desc.trim(),
+      split_with: expDraft.splitWith.join(','),
+      date: new Date().toISOString().slice(0, 10),
+    }));
+  }
+};
+
+refreshData(true);
+startPolling();
+</script>
+</body>
+</html>
