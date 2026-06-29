@@ -661,6 +661,8 @@ let memberInput = '';
 let newTripName = '';
 let renameTripDraft = '';
 let editMemberDraft = { oldName: '', newName: '' };
+let expenseFilter = { person: '', category: '' };
+let showArchivedList = false;
 let isLoading = true;
 let loadError = null;
 let pollTimer = null;
@@ -688,6 +690,7 @@ function getTripObjects() {
     trip_id: t.trip_id,
     name: t.trip_name,
     members: parseMembers(t.members),
+    archived: t.archived === 'true' || t.archived === true,
   }));
 }
 function getExpensesForTrip(tripId) {
@@ -716,7 +719,10 @@ async function refreshData(showSpinner) {
     const data = await apiGet();
     rawTrips = data.trips || [];
     rawExpenses = data.expenses || [];
-    if (!activeTripId && rawTrips.length > 0) activeTripId = rawTrips[0].trip_id;
+    if (!activeTripId && rawTrips.length > 0) {
+      const firstActive = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
+      activeTripId = firstActive ? firstActive.trip_id : rawTrips[0].trip_id;
+    }
     loadError = null;
     setSyncDot('ok');
   } catch (err) {
@@ -752,16 +758,36 @@ function render() {
     return;
   }
 
-  const trips = getTripObjects();
-  const trip = trips.find(t => t.trip_id === activeTripId) || null;
+  const allTrips = getTripObjects();
+  const activeTrips = allTrips.filter(t => !t.archived);
+  const archivedTrips = allTrips.filter(t => t.archived);
+  const trip = allTrips.find(t => t.trip_id === activeTripId) || null;
 
   let html = '<div class="tabs">';
-  trips.forEach(t => {
+  activeTrips.forEach(t => {
     html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
   });
   html += `<div class="tab add-tab" data-action="openNewTrip">+ Trip mới</div></div>`;
 
-  if (!trip && trips.length === 0) {
+  if (archivedTrips.length > 0) {
+    html += `<div style="margin-bottom:1.1rem;">
+      <span style="font-size:12.5px; color:var(--text-muted); cursor:pointer; text-decoration:underline;" data-action="toggleArchivedList">
+        ${showArchivedList ? 'Ẩn' : 'Xem'} trip đã lưu trữ (${archivedTrips.length})
+      </span>`;
+    if (showArchivedList) {
+      html += `<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">`;
+      archivedTrips.forEach(t => {
+        html += `<div class="row" style="justify-content:space-between; background:var(--surface-2); border-radius:var(--radius-sm); padding:8px 12px;">
+          <span style="font-size:13.5px; cursor:pointer;" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</span>
+          <button class="icon-btn" data-action="unarchiveTrip" data-id="${t.trip_id}" aria-label="Bỏ lưu trữ" title="Bỏ lưu trữ">↩️</button>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (!trip && allTrips.length === 0) {
     html += `<p class="empty">Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.</p>`;
   }
 
@@ -769,7 +795,7 @@ function render() {
     const expenses = getExpensesForTrip(trip.trip_id);
 
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
-      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}</h2>
+      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}${trip.archived ? ' <span style="font-size:11px; color:var(--text-muted); font-weight:500;">(đã lưu trữ)</span>' : ''}</h2>
       <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa tên trip">✏️</button>
     </div>`;
 
@@ -799,24 +825,49 @@ function render() {
     } else if (expenses.length === 0) {
       html += `<p class="empty">Chưa có chi tiêu nào.</p>`;
     } else {
-      let total = 0;
-      expenses.forEach(e => {
-        total += e.amount;
-        html += `<div class="expense-row">
-          <div class="expense-main">
-            <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
-            <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
-          </div>
-          <div class="row" style="gap:0; flex-wrap:nowrap;">
-            <span class="amount">${fmt(e.amount)}</span>
-            <div class="expense-actions">
-              <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
-              <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
-            </div>
-          </div>
-        </div>`;
+      html += `<div class="row" style="gap:8px; margin-bottom:12px;">
+        <select id="filterPerson" style="flex:1; min-width:0; height:34px; font-size:13px;">
+          <option value="">Tất cả người trả</option>
+          ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${expenseFilter.person === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+        <select id="filterCategory" style="flex:1; min-width:0; height:34px; font-size:13px;">
+          <option value="__all__">Tất cả loại</option>
+          ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+        </select>
+      </div>`;
+
+      const filtered = expenses.filter(e => {
+        if (expenseFilter.person && e.paidBy !== expenseFilter.person) return false;
+        if (expenseFilter.category) {
+          const wantNone = expenseFilter.category === '__none__';
+          if (wantNone ? e.category : e.category !== expenseFilter.category) return false;
+        }
+        return true;
       });
-      html += `<div class="total-line">Tổng chi <strong style="color:var(--text-primary)">${fmt(total)}</strong></div>`;
+
+      if (filtered.length === 0) {
+        html += `<p class="empty">Không có chi tiêu khớp bộ lọc.</p>`;
+      } else {
+        let filteredTotal = 0;
+        filtered.forEach(e => {
+          filteredTotal += e.amount;
+          html += `<div class="expense-row">
+            <div class="expense-main">
+              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
+              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
+            </div>
+            <div class="row" style="gap:0; flex-wrap:nowrap;">
+              <span class="amount">${fmt(e.amount)}</span>
+              <div class="expense-actions">
+                <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
+                <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
+              </div>
+            </div>
+          </div>`;
+        });
+        const isFiltered = expenseFilter.person || expenseFilter.category;
+        html += `<div class="total-line">${isFiltered ? 'Tổng (đã lọc)' : 'Tổng chi'} <strong style="color:var(--text-primary)">${fmt(filteredTotal)}</strong></div>`;
+      }
     }
     html += `</div>`;
 
@@ -861,7 +912,13 @@ function render() {
       html += `</div>`;
     }
 
-    html += `<button class="danger-link" data-action="deleteTrip">Xóa trip này</button>`;
+    html += `<div class="row" style="justify-content:space-between; margin-top:4px;">
+      <button class="danger-link" data-action="deleteTrip">Xóa trip này</button>
+      ${trip.archived
+        ? `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="unarchiveTrip" data-id="${trip.trip_id}">Bỏ lưu trữ</button>`
+        : `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="archiveTrip" data-id="${trip.trip_id}">Lưu trữ trip</button>`
+      }
+    </div>`;
   }
 
   app.innerHTML = html;
@@ -869,6 +926,14 @@ function render() {
   app.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handleAction));
   const mi = document.getElementById('memberInput');
   if (mi) mi.addEventListener('input', e => { memberInput = e.target.value; });
+
+  const fp = document.getElementById('filterPerson');
+  if (fp) fp.addEventListener('change', e => { expenseFilter.person = e.target.value; render(); });
+  const fc = document.getElementById('filterCategory');
+  if (fc) fc.addEventListener('change', e => {
+    expenseFilter.category = e.target.value === '__all__' ? '' : e.target.value;
+    render();
+  });
 
   const existingOverlay = document.getElementById('modalOverlay');
   if (existingOverlay) existingOverlay.remove();
@@ -904,13 +969,35 @@ function handleAction(e) {
   const id = e.currentTarget.dataset.id;
   const name = e.currentTarget.dataset.name;
 
-  if (action === 'selectTrip') { activeTripId = id; render(); }
+  if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
   if (action === 'openRenameTrip') {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
     modal = 'renameTrip'; render();
+  }
+
+  if (action === 'toggleArchivedList') {
+    showArchivedList = !showArchivedList; render();
+  }
+
+  if (action === 'archiveTrip') {
+    const trip = rawTrips.find(t => t.trip_id === id);
+    withSaving(
+      () => { trip.archived = 'true'; },
+      () => apiPost({ action: 'setTripArchived', trip_id: id, archived: true })
+    );
+    showToast('Đã lưu trữ trip');
+  }
+
+  if (action === 'unarchiveTrip') {
+    const trip = rawTrips.find(t => t.trip_id === id);
+    withSaving(
+      () => { trip.archived = ''; },
+      () => apiPost({ action: 'setTripArchived', trip_id: id, archived: false })
+    );
+    showToast('Đã bỏ lưu trữ');
   }
 
   if (action === 'openEditMember') {
