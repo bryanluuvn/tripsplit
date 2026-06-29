@@ -123,6 +123,15 @@
   }
   .total-line { text-align: right; font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
   .danger-link { color: var(--danger); font-size: 13px; background: none; border: none; padding: 4px 0; cursor: pointer; }
+  .cat-badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: var(--surface-2); color: var(--text-secondary); margin-right: 6px;
+  }
+  .balance-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+  .balance-pos { color: #1F8A4C; }
+  .balance-neg { color: var(--danger); }
+  .icon-btn { border: none; background: none; padding: 4px; cursor: pointer; display: inline-flex; color: var(--text-muted); }
+  .icon-btn:hover { color: var(--text-primary); }
   .sync-dot {
     width: 8px; height: 8px; border-radius: 50%; background: #888; display: inline-block;
   }
@@ -156,6 +165,22 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
+
+const CATEGORIES = [
+  { id: '', label: 'Khác' },
+  { id: 'food', label: 'Ăn uống' },
+  { id: 'transport', label: 'Di chuyển' },
+  { id: 'stay', label: 'Chỗ ở' },
+  { id: 'activity', label: 'Vui chơi' },
+];
+function categoryLabel(id) {
+  const found = CATEGORIES.find(c => c.id === id);
+  return found ? found.label : 'Khác';
+}
+function nowTimeStr() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
 
 function computeBalances(members, expenses) {
   const balances = {};
@@ -212,11 +237,11 @@ let rawTrips = [];     // raw rows từ Sheet Trips
 let rawExpenses = [];  // raw rows từ Sheet Expenses
 let activeTripId = null;
 let modal = null;
-let expDraft = { paidBy: '', amount: '', desc: '', splitWith: [] };
+let expDraft = { id: null, paidBy: '', amount: '', desc: '', splitWith: [], date: '', time: '', category: '' };
 let memberInput = '';
 let newTripName = '';
+let renameTripDraft = '';
 let isLoading = true;
-let isSaving = false;
 let loadError = null;
 let pollTimer = null;
 let toastTimer = null;
@@ -255,8 +280,14 @@ function getExpensesForTrip(tripId) {
       desc: e.desc,
       splitWith: parseMembers(e.split_with),
       date: e.date,
+      time: e.time || '',
+      category: e.category || '',
     }))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+    .sort((a, b) => {
+      const ak = a.date + ' ' + (a.time || '00:00');
+      const bk = b.date + ' ' + (b.time || '00:00');
+      return ak < bk ? 1 : -1;
+    });
 }
 
 async function refreshData(showSpinner) {
@@ -317,13 +348,19 @@ function render() {
   if (trip) {
     const expenses = getExpensesForTrip(trip.trip_id);
 
+    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.5rem;">
+      <h2 style="font-size:16px; margin:0;">${escapeHtml(trip.name)}</h2>
+      <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa tên trip">✏️</button>
+    </div>`;
+
     html += `<div class="card"><div class="label">Thành viên</div><div class="row" style="margin-bottom:10px;">`;
     trip.members.forEach(m => {
-      html += `<span class="member-tag">${escapeHtml(m)}<button data-action="removeMember" data-name="${escapeHtml(m)}">✕</button></span>`;
+      const hasExpenses = expenses.some(e => e.paidBy === m);
+      html += `<span class="member-tag">${escapeHtml(m)}<button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button></span>`;
     });
     html += `</div><div class="row">
       <input id="memberInput" placeholder="Tên thành viên" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
-      <button onclick="window.app.addMember()" ${isSaving ? 'disabled' : ''}>Thêm</button>
+      <button onclick="window.app.addMember()">Thêm</button>
     </div></div>`;
 
     html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
@@ -341,12 +378,13 @@ function render() {
         total += e.amount;
         html += `<div class="expense-row">
           <div>
-            <strong>${escapeHtml(e.paidBy)}</strong> trả cho ${escapeHtml(e.desc)}
-            <div class="expense-meta">${escapeHtml(e.date)} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
+            <span class="cat-badge">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong> trả cho ${escapeHtml(e.desc)}
+            <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
           </div>
-          <div class="row" style="gap:10px;">
+          <div class="row" style="gap:6px;">
             <span class="amount">${fmt(e.amount)}</span>
-            <button class="ghost" data-action="deleteExpense" data-id="${e.id}">🗑</button>
+            <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
+            <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
           </div>
         </div>`;
       });
@@ -357,6 +395,17 @@ function render() {
     if (trip.members.length > 0) {
       const balances = computeBalances(trip.members, expenses);
       const settlements = simplifyDebts(balances);
+
+      html += `<div class="card"><div class="label">Số dư từng người</div>`;
+      trip.members.forEach(m => {
+        const bal = Math.round(balances[m] || 0);
+        const cls = bal > 0 ? 'balance-pos' : bal < 0 ? 'balance-neg' : '';
+        const sign = bal > 0 ? '+' : '';
+        const note = bal > 100 ? 'sẽ được nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
+        html += `<div class="balance-row"><span>${escapeHtml(m)}</span><span class="${cls}">${sign}${fmt(bal)} <span style="color:var(--text-muted); font-size:12px;">(${note})</span></span></div>`;
+      });
+      html += `</div>`;
+
       html += `<div class="card"><div class="row" style="justify-content:space-between; margin-bottom:8px;">
         <div class="label" style="margin-bottom:0;">Kết quả chia tiền</div>
         <button data-action="copySummary">📋 Copy để gửi</button>
@@ -385,16 +434,28 @@ function render() {
   if (modal) renderModal();
 }
 
-async function withSaving(fn) {
-  isSaving = true; setSyncDot('loading');
+// Optimistic update: áp dụng thay đổi vào state cục bộ NGAY, render ngay,
+// rồi mới gửi request lên server ở dưới nền. Nếu lỗi, hoàn tác lại bằng snapshot.
+async function withSaving(applyLocal, sendRequest) {
+  const snapshotTrips = JSON.parse(JSON.stringify(rawTrips));
+  const snapshotExpenses = JSON.parse(JSON.stringify(rawExpenses));
+
+  if (applyLocal) applyLocal();
+  render();
+  setSyncDot('loading');
+
   try {
-    await fn();
-    await refreshData(false);
+    await sendRequest();
+    setSyncDot('ok');
+    // Đồng bộ lại nền để lấy đúng dữ liệu thật từ Sheet (không hiện loading, không chặn UI)
+    refreshData(false);
   } catch (err) {
-    showToast('Lỗi: ' + err.message);
+    rawTrips = snapshotTrips;
+    rawExpenses = snapshotExpenses;
+    showToast('Lỗi đồng bộ, đã hoàn tác: ' + err.message);
     setSyncDot('error');
+    render();
   }
-  isSaving = false;
 }
 
 function handleAction(e) {
@@ -405,28 +466,84 @@ function handleAction(e) {
   if (action === 'selectTrip') { activeTripId = id; render(); }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
+  if (action === 'openRenameTrip') {
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    renameTripDraft = trip.trip_name;
+    modal = 'renameTrip'; render();
+  }
+
   if (action === 'removeMember') {
-    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const newMembers = trip.members.filter(m => m !== name);
-    withSaving(() => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newMembers.join(',') }));
+    const hasExpenses = e.currentTarget.dataset.hasExpenses === 'true';
+    if (hasExpenses) {
+      const ok = confirm(`${name} đã có chi tiêu trong trip này. Xóa thành viên sẽ XÓA LUÔN mọi chi tiêu mà ${name} đã trả. Tiếp tục?`);
+      if (!ok) return;
+    }
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    const newMembers = parseMembers(trip.members).filter(m => m !== name);
+    const tripId = activeTripId;
+    const expensesToDelete = rawExpenses.filter(ex => ex.trip_id === tripId && ex.paid_by === name);
+    withSaving(
+      () => {
+        trip.members = newMembers.join(',');
+        rawExpenses = rawExpenses.filter(ex => !(ex.trip_id === tripId && ex.paid_by === name));
+      },
+      async () => {
+        await apiPost({ action: 'updateTripMembers', trip_id: tripId, members: newMembers.join(',') });
+        for (const ex of expensesToDelete) {
+          await apiPost({ action: 'deleteExpense', expense_id: ex.expense_id });
+        }
+      }
+    );
   }
 
   if (action === 'openAddExpense') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    expDraft = { paidBy: trip.members[0] || '', amount: '', desc: '', splitWith: [] };
+    const now = new Date();
+    expDraft = {
+      id: null,
+      paidBy: trip.members[0] || '',
+      amount: '', desc: '', splitWith: [],
+      date: now.toISOString().slice(0, 10),
+      time: nowTimeStr(),
+      category: '',
+    };
+    modal = 'addExpense'; render();
+  }
+
+  if (action === 'editExpense') {
+    const exp = rawExpenses.find(ex => ex.expense_id === id);
+    expDraft = {
+      id: exp.expense_id,
+      paidBy: exp.paid_by,
+      amount: String(exp.amount),
+      desc: exp.desc,
+      splitWith: parseMembers(exp.split_with),
+      date: exp.date,
+      time: exp.time || nowTimeStr(),
+      category: exp.category || '',
+    };
     modal = 'addExpense'; render();
   }
 
   if (action === 'deleteExpense') {
-    withSaving(() => apiPost({ action: 'deleteExpense', expense_id: id }));
+    if (!confirm('Xóa chi tiêu này? Không thể hoàn tác.')) return;
+    withSaving(
+      () => { rawExpenses = rawExpenses.filter(e => e.expense_id !== id); },
+      () => apiPost({ action: 'deleteExpense', expense_id: id })
+    );
   }
 
   if (action === 'deleteTrip') {
     if (!confirm('Xóa trip này? Không thể hoàn tác, dữ liệu sẽ mất với mọi người.')) return;
-    withSaving(async () => {
-      await apiPost({ action: 'deleteTrip', trip_id: activeTripId });
-      activeTripId = null;
-    });
+    const tripIdToDelete = activeTripId;
+    withSaving(
+      () => {
+        rawTrips = rawTrips.filter(t => t.trip_id !== tripIdToDelete);
+        rawExpenses = rawExpenses.filter(e => e.trip_id !== tripIdToDelete);
+        activeTripId = rawTrips.length > 0 ? rawTrips[0].trip_id : null;
+      },
+      () => apiPost({ action: 'deleteTrip', trip_id: tripIdToDelete })
+    );
   }
 
   if (action === 'copySummary') {
@@ -435,7 +552,14 @@ function handleAction(e) {
     const balances = computeBalances(trip.members, expenses);
     const settlements = simplifyDebts(balances);
     let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
-    expenses.slice().reverse().forEach(ex => { text += `${ex.date} ${ex.paidBy} trả ${fmt(ex.amount)} cho ${ex.desc}\n`; });
+    expenses.slice().reverse().forEach(ex => {
+      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${fmt(ex.amount)} cho ${ex.desc}\n`;
+    });
+    text += '\nSố dư từng người:\n';
+    trip.members.forEach(m => {
+      const bal = Math.round(balances[m] || 0);
+      text += `${m}: ${bal > 0 ? '+' : ''}${fmt(bal)}\n`;
+    });
     text += '\nKết quả thanh toán:\n';
     if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
     else settlements.forEach(s => { text += `${s.from} chuyển ${s.to}: ${fmt(s.amount)}\n`; });
@@ -460,20 +584,45 @@ function renderModal() {
       </div>
       <div class="row" style="justify-content:flex-end;">
         <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.createTrip()" ${isSaving ? 'disabled' : ''}>Tạo</button>
+        <button class="primary" onclick="window.app.createTrip()">Tạo</button>
+      </div>
+    </div>`;
+  }
+
+  if (modal === 'renameTrip') {
+    overlay.innerHTML = `<div class="modal">
+      <h2>Sửa tên trip</h2>
+      <div class="field">
+        <label>Tên trip</label>
+        <input id="renameTripInput" value="${escapeHtml(renameTripDraft)}">
+      </div>
+      <div class="row" style="justify-content:flex-end;">
+        <button onclick="window.app.closeModal()">Hủy</button>
+        <button class="primary" onclick="window.app.renameTrip()">Lưu</button>
       </div>
     </div>`;
   }
 
   if (modal === 'addExpense') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const isEditing = !!expDraft.id;
     overlay.innerHTML = `<div class="modal">
-      <h2>Thêm chi tiêu</h2>
+      <h2>${isEditing ? 'Sửa chi tiêu' : 'Thêm chi tiêu'}</h2>
       <div class="field">
         <label>Ai trả</label>
         <select id="paidBySelect">
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
         </select>
+      </div>
+      <div class="row" style="gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>Ngày</label>
+          <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Giờ</label>
+          <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
+        </div>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
@@ -484,6 +633,12 @@ function renderModal() {
         <input id="descInput" placeholder="Ăn tối, taxi, khách sạn..." value="${escapeHtml(expDraft.desc)}">
       </div>
       <div class="field">
+        <label>Loại chi tiêu</label>
+        <select id="categorySelect">
+          ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
         <label>Chia cho (bỏ trống = cả nhóm)</label>
         <div class="row">
           ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
@@ -491,7 +646,7 @@ function renderModal() {
       </div>
       <div class="row" style="justify-content:flex-end; margin-top: 8px;">
         <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.submitExpense()" ${isSaving ? 'disabled' : ''}>Lưu chi tiêu</button>
+        <button class="primary" onclick="window.app.submitExpense()">${isEditing ? 'Lưu thay đổi' : 'Lưu chi tiêu'}</button>
       </div>
     </div>`;
   }
@@ -505,10 +660,19 @@ function renderModal() {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.createTrip(); });
     inp.focus();
   }
+  if (modal === 'renameTrip') {
+    const inp = document.getElementById('renameTripInput');
+    inp.addEventListener('input', e => renameTripDraft = e.target.value);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.app.renameTrip(); });
+    inp.focus();
+  }
   if (modal === 'addExpense') {
     document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
+    document.getElementById('dateInput').addEventListener('input', e => expDraft.date = e.target.value);
+    document.getElementById('timeInput').addEventListener('input', e => expDraft.time = e.target.value);
     document.getElementById('amountInput').addEventListener('input', e => expDraft.amount = e.target.value);
     document.getElementById('descInput').addEventListener('input', e => expDraft.desc = e.target.value);
+    document.getElementById('categorySelect').addEventListener('change', e => expDraft.category = e.target.value);
     overlay.querySelectorAll('[data-toggle-member]').forEach(el => {
       el.addEventListener('click', () => {
         const m = el.dataset.toggleMember;
@@ -526,11 +690,15 @@ window.app = {
   addMember() {
     const name = memberInput.trim();
     if (!name) return;
-    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    if (trip.members.includes(name)) { memberInput = ''; return; }
-    const newMembers = [...trip.members, name];
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    const currentMembers = parseMembers(trip.members);
+    if (currentMembers.includes(name)) { memberInput = ''; return; }
+    const newMembers = [...currentMembers, name];
     memberInput = '';
-    withSaving(() => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newMembers.join(',') }));
+    withSaving(
+      () => { trip.members = newMembers.join(','); },
+      () => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newMembers.join(',') })
+    );
   },
 
   closeModal() { modal = null; render(); },
@@ -540,29 +708,60 @@ window.app = {
     if (!name) return;
     const id = uid();
     modal = null;
-    withSaving(async () => {
-      await apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '' });
-      activeTripId = id;
-    });
+    withSaving(
+      () => {
+        rawTrips.push({ trip_id: id, trip_name: name, members: '' });
+        activeTripId = id;
+      },
+      () => apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '' })
+    );
+  },
+
+  renameTrip() {
+    const name = renameTripDraft.trim();
+    if (!name) return;
+    modal = null;
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    withSaving(
+      () => { trip.trip_name = name; },
+      () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name })
+    );
   },
 
   submitExpense() {
     const amt = parseFloat(expDraft.amount);
-    if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.desc.trim()) {
+    if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.desc.trim() || !expDraft.date) {
       showToast('Điền đủ thông tin trước khi lưu');
       return;
     }
     modal = null;
-    withSaving(() => apiPost({
-      action: 'addExpense',
-      expense_id: uid(),
+    const isEditing = !!expDraft.id;
+    const expenseData = {
+      expense_id: isEditing ? expDraft.id : uid(),
       trip_id: activeTripId,
       paid_by: expDraft.paidBy,
       amount: amt,
       desc: expDraft.desc.trim(),
       split_with: expDraft.splitWith.join(','),
-      date: new Date().toISOString().slice(0, 10),
-    }));
+      date: expDraft.date,
+      time: expDraft.time || '',
+      category: expDraft.category || '',
+    };
+
+    if (isEditing) {
+      withSaving(
+        () => {
+          const idx = rawExpenses.findIndex(e => e.expense_id === expDraft.id);
+          if (idx !== -1) rawExpenses[idx] = expenseData;
+        },
+        () => apiPost({ action: 'editExpense', ...expenseData })
+      );
+    } else {
+      withSaving(
+        () => { rawExpenses.push(expenseData); },
+        () => apiPost({ action: 'addExpense', ...expenseData })
+      );
+    }
   }
 };
 
