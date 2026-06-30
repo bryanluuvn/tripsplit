@@ -400,6 +400,24 @@ function computeCategoryTotals(expenses) {
   return { rows, grandTotal };
 }
 
+// Nhóm chi tiêu theo ngày, mỗi ngày tách theo category để vẽ stacked bar chart.
+// Bỏ qua khoản góp quỹ giống computeCategoryTotals, vì lý do tương tự.
+function computeDailyCategoryTotals(expenses) {
+  const byDate = {}; // date -> { total, byCategory: { catId: amt } }
+  expenses.forEach(e => {
+    if (e.category === 'fund') return;
+    const amt = e.amountVND ?? e.amount;
+    const date = e.date || '';
+    if (!byDate[date]) byDate[date] = { date, total: 0, byCategory: {} };
+    byDate[date].total += amt;
+    const catKey = e.category || '';
+    byDate[date].byCategory[catKey] = (byDate[date].byCategory[catKey] || 0) + amt;
+  });
+  const days = Object.values(byDate).sort((a, b) => a.date < b.date ? -1 : 1);
+  const maxTotal = Math.max(...days.map(d => d.total), 1);
+  return { days, maxTotal };
+}
+
 function renderCategoryChart(expenses) {
   const { rows, grandTotal } = computeCategoryTotals(expenses);
   if (grandTotal <= 0) return '';
@@ -446,6 +464,56 @@ function renderCategoryChart(expenses) {
 
   return html;
 }
+
+function renderDailyChart(expenses) {
+  const { days, maxTotal } = computeDailyCategoryTotals(expenses);
+  if (days.length === 0) return '';
+
+  const CHART_H = 140; // chiều cao vùng vẽ cột, px
+
+  let html = `<div class="card">
+    <div class="card-head"><span class="card-title">Chi tiêu theo ngày</span></div>
+    <div style="display:flex; align-items:flex-end; gap:6px; height:${CHART_H}px; overflow-x:auto; padding-bottom:2px;">`;
+
+  days.forEach(d => {
+    const barH = Math.max((d.total / maxTotal) * CHART_H, 4);
+    // Sắp category trong cột theo thứ tự cố định (giống bảng category chính) để màu nhất quán giữa các cột
+    const catEntries = CATEGORIES
+      .map(c => ({ cat: c.id, amt: d.byCategory[c.id] || 0 }))
+      .filter(e => e.amt > 0);
+
+    let segmentsHtml = '';
+    catEntries.forEach(e => {
+      const segH = (e.amt / d.total) * barH;
+      segmentsHtml += `<div style="width:100%; height:${segH}px; background:${categoryColor(e.cat)};" title="${escapeHtml(categoryLabel(e.cat))}: ${fmt(e.amt)}"></div>`;
+    });
+
+    const shortDate = d.date ? d.date.slice(5).replace('-', '/') : '?'; // "2026-06-29" -> "06/29"
+    html += `<div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:34px;">
+      <div style="display:flex; flex-direction:column-reverse; width:20px; height:${CHART_H}px; border-radius:4px 4px 0 0; overflow:hidden;">
+        ${segmentsHtml}
+      </div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:4px; white-space:nowrap;">${escapeHtml(shortDate)}</div>
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  // Legend dùng chung danh sách category xuất hiện trong toàn bộ trip (không lặp theo từng ngày)
+  const usedCats = new Set();
+  days.forEach(d => Object.keys(d.byCategory).forEach(c => { if (d.byCategory[c] > 0) usedCats.add(c); }));
+  html += `<div class="row" style="gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); flex-wrap:wrap;">`;
+  CATEGORIES.filter(c => usedCats.has(c.id)).forEach(c => {
+    html += `<div class="legend-item" style="font-size:11.5px;">
+      <span class="legend-dot" style="background:${c.color};"></span>
+      <span class="legend-label" style="flex:none;">${escapeHtml(c.label)}</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  return html;
+}
+
 
 function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining) {
   const W = 600;
@@ -689,6 +757,22 @@ function computeBalances(members, expenses) {
     splitMembers.forEach(m => { balances[m] = (balances[m] || 0) - share; });
   });
   return balances;
+}
+
+// Tính tổng số tiền mỗi người đã THỰC SỰ DÙNG (phần chia trong mỗi khoản chi),
+// khác với balances (vốn là đã trả - đã dùng). Khoản góp quỹ không tính cho ai,
+// vì đó không phải tiêu dùng.
+function computeUsage(members, expenses) {
+  const usage = {};
+  members.forEach(m => usage[m] = 0);
+  expenses.forEach(exp => {
+    if (exp.category === 'fund') return;
+    const amt = exp.amountVND ?? exp.amount;
+    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
+    const share = amt / splitMembers.length;
+    splitMembers.forEach(m => { usage[m] = (usage[m] || 0) + share; });
+  });
+  return usage;
 }
 
 // Tách riêng số dư của "Quỹ chung" (tiền mặt) ra khỏi bảng số dư của người thật,
@@ -1019,6 +1103,7 @@ function render() {
 
     if (trip.members.length > 0 && expenses.length > 0) {
       html += renderCategoryChart(expenses);
+      html += renderDailyChart(expenses);
     }
 
     if (trip.members.length > 0) {
@@ -1040,6 +1125,25 @@ function render() {
           <span class="balance-amt ${cls}">${sign}${fmt(bal)}<span class="balance-note">${note}</span></span>
         </div>`;
       });
+      html += `</div>`;
+
+      const usage = computeUsage(trip.members, expenses);
+      const maxUsage = Math.max(...trip.members.map(m => usage[m] || 0), 1);
+      html += `<div class="card">
+        <div class="card-head"><span class="card-title">Số tiền đã sử dụng</span></div>`;
+      trip.members
+        .slice()
+        .sort((a, b) => (usage[b] || 0) - (usage[a] || 0))
+        .forEach(m => {
+          const u = usage[m] || 0;
+          const pct = maxUsage > 0 ? (u / maxUsage) * 100 : 0;
+          html += `<div class="cat-chart-row" style="padding:8px 0;">
+            <span class="cat-chart-label" style="width:80px;">${escapeHtml(m)}</span>
+            <span class="cat-chart-bar-track"><span class="cat-chart-bar-fill" style="width:${Math.max(pct, 3)}%; background:var(--accent);"></span></span>
+            <span class="cat-chart-amt">${fmt(u)}</span>
+          </div>`;
+        });
+      html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:8px;">Tổng phần mỗi người thực dùng trong các khoản chi tiêu (không tính tiền góp quỹ)</div>`;
       html += `</div>`;
 
       if (hasCashFund) {
