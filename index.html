@@ -319,6 +319,12 @@ function fmt(n) {
   const display = kRounded % 1 === 0 ? kRounded.toFixed(0) : kRounded.toFixed(1);
   return display.replace('.', ',') + 'k';
 }
+// Format số tiền theo đơn vị ngoại tệ gốc (không chia 1000 như VNĐ), kèm symbol.
+function fmtForeign(n, currencyCode) {
+  const rounded = Math.round(n * 100) / 100; // giữ tối đa 2 số lẻ cho ngoại tệ
+  const display = rounded.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+  return display + currencySymbol(currencyCode);
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -377,6 +383,9 @@ function computeCategoryTotals(expenses) {
   const totals = {};
   let grandTotal = 0;
   expenses.forEach(e => {
+    // Bỏ qua khoản góp quỹ - đây không phải "chi tiêu", mà là tiền nạp vào quỹ,
+    // đưa vào sẽ làm méo tỷ lệ % của các loại chi tiêu thật.
+    if (e.category === 'fund') return;
     const key = e.category || '';
     const amt = e.amountVND ?? e.amount;
     totals[key] = (totals[key] || 0) + amt;
@@ -441,7 +450,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const scale = 2; // render @2x cho ảnh nét trên màn hình retina
-  const hasCashFund = cashFundRemaining !== null && cashFundRemaining !== undefined;
+  const hasCashFund = Array.isArray(cashFundRemaining) && cashFundRemaining.length > 0;
 
   // --- Bước 1: đo trước chiều cao cần thiết bằng cách render thử trên canvas tạm ---
   const { rows: catRows, grandTotal } = computeCategoryTotals(expenses);
@@ -452,7 +461,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     estHeight += donutBlockHeight + 28;
   }
   estHeight += 22 + trip.members.length * 26 + 6 + 28; // số dư + line
-  if (hasCashFund) estHeight += 22 + 26 + 10 + 28; // khối quỹ tiền mặt + line
+  if (hasCashFund) estHeight += 22 + cashFundRemaining.length * 26 + 10 + 28; // khối quỹ tiền mặt (1 dòng/đơn vị) + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
   estHeight += 20; // footer + padding đáy
 
@@ -585,16 +594,19 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     ctx.font = '600 11px -apple-system, sans-serif';
     ctx.fillText('QUỸ TIỀN MẶT CHUNG', PAD, y);
     y += 22;
-    const fundRounded = Math.round(cashFundRemaining);
-    ctx.fillStyle = '#1A1A2E';
-    ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText('Còn lại trong quỹ', PAD, y);
-    ctx.fillStyle = fundRounded >= 0 ? '#1A9461' : '#D6453A';
-    ctx.font = '700 14px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(fmt(fundRounded), W - PAD, y);
-    ctx.textAlign = 'left';
-    y += 26 + 10;
+    cashFundRemaining.forEach(r => {
+      const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+      ctx.fillStyle = '#1A1A2E';
+      ctx.font = '500 14px -apple-system, sans-serif';
+      ctx.fillText(`Còn lại (${r.label})`, PAD, y);
+      ctx.fillStyle = r.remaining >= 0 ? '#1A9461' : '#D6453A';
+      ctx.font = '700 14px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(display, W - PAD, y);
+      ctx.textAlign = 'left';
+      y += 26;
+    });
+    y += 10;
     ctx.strokeStyle = '#E3E5F2';
     ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
     y += 28;
@@ -693,15 +705,31 @@ function splitCashFundBalance(balances) {
 
 // Tính đúng số tiền mặt còn lại trong quỹ chung = tổng đã góp (category 'fund')
 // trừ tổng đã chi ra từ quỹ (paidBy = Quỹ chung, không phải khoản fund).
+// Tính tồn quỹ tiền mặt riêng theo TỪNG đơn vị tiền tệ đã dùng (không quy đổi gộp về VNĐ),
+// vì tiền mặt vật lý trong túi là tiền thật theo từng loại - quy đổi gộp sẽ làm mất
+// thông tin "đang cầm bao nhiêu tờ ngoại tệ thật". Trả về mảng [{ currency, label, remaining }],
+// sắp VNĐ lên đầu rồi đến các ngoại tệ khác.
 function computeCashFundRemaining(expenses) {
-  let totalContributed = 0;
-  let totalSpent = 0;
+  const byCurrency = {}; // key: '' (VNĐ) hoặc mã ngoại tệ -> { contributed, spent }
   expenses.forEach(exp => {
-    const amt = exp.amountVND ?? exp.amount;
-    if (exp.category === 'fund') totalContributed += amt;
-    if (exp.paidBy === CASH_FUND_NAME && exp.category !== 'fund') totalSpent += amt;
+    const key = exp.currency || '';
+    if (!byCurrency[key]) byCurrency[key] = { contributed: 0, spent: 0 };
+    if (exp.category === 'fund') byCurrency[key].contributed += exp.amount;
+    if (exp.paidBy === CASH_FUND_NAME && exp.category !== 'fund') byCurrency[key].spent += exp.amount;
   });
-  return totalContributed - totalSpent;
+  const result = Object.entries(byCurrency)
+    .map(([key, v]) => ({
+      currency: key,
+      label: key || 'VNĐ',
+      remaining: v.contributed - v.spent,
+    }));
+  // VNĐ lên đầu, còn lại theo alphabet
+  result.sort((a, b) => {
+    if (a.currency === '') return -1;
+    if (b.currency === '') return 1;
+    return a.currency.localeCompare(b.currency);
+  });
+  return result;
 }
 
 function simplifyDebts(balances) {
@@ -1008,17 +1036,17 @@ function render() {
       html += `</div>`;
 
       if (hasCashFund) {
-        const fundRounded = Math.round(cashFundRemaining);
-        const fundCls = fundRounded >= 0 ? 'balance-pos' : 'balance-neg';
-        const fundNote = fundRounded >= 0 ? 'tiền mặt còn lại trong quỹ' : 'quỹ đã chi vượt số đã góp';
         html += `<div class="card">
-          <div class="card-head"><span class="card-title">💰 Quỹ tiền mặt chung</span></div>
-          <div class="balance-row" style="border-bottom:none;">
-            <span class="balance-name">Còn lại trong quỹ</span>
-            <span class="balance-amt ${fundCls}">${fmt(fundRounded)}</span>
-          </div>
-          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${fundNote}</div>
-        </div>`;
+          <div class="card-head"><span class="card-title">💰 Quỹ tiền mặt chung</span></div>`;
+        cashFundRemaining.forEach(r => {
+          const cls = r.remaining >= 0 ? 'balance-pos' : 'balance-neg';
+          const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+          html += `<div class="balance-row">
+            <span class="balance-name">Còn lại (${escapeHtml(r.label)})</span>
+            <span class="balance-amt ${cls}">${display}</span>
+          </div>`;
+        });
+        html += `</div>`;
       }
 
       html += `<div class="card">
@@ -1266,7 +1294,10 @@ function handleAction(e) {
     });
     if (hasCashFund) {
       rows.push([]);
-      rows.push(['Quỹ tiền mặt chung', Math.round(cashFundRemaining)]);
+      rows.push(['Quỹ tiền mặt chung']);
+      cashFundRemaining.forEach(r => {
+        rows.push([`Còn lại (${r.label})`, r.currency ? r.remaining : Math.round(r.remaining)]);
+      });
     }
     rows.push([]);
     rows.push(['Kết quả thanh toán']);
@@ -1310,7 +1341,11 @@ function handleAction(e) {
       text += `${m}: ${bal > 0 ? '+' : ''}${fmt(bal)}\n`;
     });
     if (hasCashFund) {
-      text += `\nQuỹ tiền mặt chung còn lại: ${fmt(Math.round(cashFundRemaining))}\n`;
+      text += '\nQuỹ tiền mặt chung còn lại:\n';
+      cashFundRemaining.forEach(r => {
+        const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+        text += `${r.label}: ${display}\n`;
+      });
     }
     text += '\nKết quả thanh toán:\n';
     if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
