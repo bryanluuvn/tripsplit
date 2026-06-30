@@ -756,18 +756,22 @@ function simplifyDebts(balances) {
 
 // ---- API layer ----
 async function apiGet() {
-  const res = await fetch(API_URL);
+  const res = await fetch(`${API_URL}?ws=${encodeURIComponent(WORKSPACE_ID)}`);
   if (!res.ok) throw new Error('GET failed');
-  return res.json();
+  const json = await res.json();
+  if (json.ok === false) throw new Error(json.error || 'GET failed');
+  return json;
 }
 async function apiPost(payload) {
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, workspace_id: WORKSPACE_ID }),
   });
   if (!res.ok) throw new Error('POST failed');
-  return res.json();
+  const json = await res.json();
+  if (json.ok === false) throw new Error(json.error || 'POST failed');
+  return json;
 }
 
 // ---- State ----
@@ -1806,8 +1810,100 @@ window.app = {
   }
 };
 
-refreshData(true);
-startPolling();
+// ===== Xác định workspace trước khi khởi động app =====
+const WORKSPACE_STORAGE_KEY = 'tripsplit_workspace_id';
+let WORKSPACE_ID = '';
+
+function getWorkspaceFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const ws = params.get('ws');
+  return ws ? ws.trim() : '';
+}
+
+function startApp(workspaceId) {
+  WORKSPACE_ID = workspaceId;
+  localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId);
+  // Đồng bộ luôn lên URL để bookmark/chia sẻ lại đúng workspace này
+  const url = new URL(window.location.href);
+  url.searchParams.set('ws', workspaceId);
+  window.history.replaceState({}, '', url);
+
+  document.getElementById('app').innerHTML = '';
+  refreshData(true);
+  startPolling();
+}
+
+function renderWorkspaceSetup(existingWarning) {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="card" style="max-width:420px; margin:2rem auto;">
+      <div class="card-head"><span class="card-title">Tạo không gian của bạn</span></div>
+      <p style="font-size:13.5px; color:var(--text-secondary); margin-top:0;">
+        Đặt một tên riêng để lưu trữ trip của bạn, tách biệt với người khác cùng dùng app này.
+        Ví dụ: tên bạn hoặc một biệt danh không trùng với ai (vd: <em>phong-2026</em>).
+      </p>
+      <div class="field">
+        <label>Tên không gian</label>
+        <input id="workspaceInput" placeholder="vd: phong-2026" autocomplete="off">
+      </div>
+      <div id="workspaceWarning"></div>
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button class="primary" onclick="window.app.confirmWorkspace()">Tiếp tục</button>
+      </div>
+    </div>
+  `;
+  if (existingWarning) {
+    document.getElementById('workspaceWarning').innerHTML = `
+      <div class="setup-banner" style="margin-bottom:0;">
+        Tên "<strong>${escapeHtml(existingWarning)}</strong>" đã có dữ liệu trip từ trước.
+        Nếu đây không phải không gian của bạn, hãy đổi sang tên khác để tránh nhầm lẫn với người khác.
+      </div>`;
+  }
+  document.getElementById('workspaceInput').focus();
+}
+
+window.app.confirmWorkspace = async function() {
+  const input = document.getElementById('workspaceInput');
+  const name = input.value.trim();
+  if (!name) {
+    showToast('Nhập tên không gian trước khi tiếp tục');
+    return;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    showToast('Chỉ dùng chữ, số, dấu gạch ngang/gạch dưới, không dấu cách');
+    return;
+  }
+  try {
+    WORKSPACE_ID = name; // tạm gán để apiPost gửi đúng workspace khi check
+    const result = await apiPost({ action: 'checkWorkspaceExists' });
+    if (result.exists && !input.dataset.confirmed) {
+      input.dataset.confirmed = 'true';
+      renderWorkspaceSetup(name);
+      const newInput = document.getElementById('workspaceInput');
+      newInput.value = name;
+      newInput.dataset.confirmed = 'true';
+      return;
+    }
+    startApp(name);
+  } catch (err) {
+    showToast('Lỗi kết nối, thử lại sau: ' + err.message);
+  }
+};
+
+// ===== Khởi động =====
+(function initWorkspace() {
+  const fromUrl = getWorkspaceFromUrl();
+  if (fromUrl) {
+    startApp(fromUrl);
+    return;
+  }
+  const fromStorage = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+  if (fromStorage) {
+    startApp(fromStorage);
+    return;
+  }
+  renderWorkspaceSetup(null);
+})();
 </script>
 </body>
 </html>
