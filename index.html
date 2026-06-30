@@ -349,7 +349,11 @@ const CATEGORIES = [
   { id: 'transport', label: 'Di chuyển', color: '#3266E0', bg: '#E8EDFC', text: '#2348AD' },
   { id: 'stay', label: 'Chỗ ở', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
   { id: 'activity', label: 'Vui chơi', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
+  { id: 'fund', label: 'Góp quỹ', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
 ];
+// Tên thành viên đặc biệt đóng vai "người trả" khi chi tiêu bằng tiền mặt từ quỹ chung.
+// Không phải người thật - bị lọc riêng khỏi bảng số dư/settlement hiển thị cho người dùng.
+const CASH_FUND_NAME = 'Quỹ chung';
 function categoryLabel(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.label : 'Khác';
@@ -431,12 +435,13 @@ function renderCategoryChart(expenses) {
   return html;
 }
 
-function generateSummaryImage(trip, expenses, balances, settlements) {
+function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining) {
   const W = 600;
   const PAD = 36;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const scale = 2; // render @2x cho ảnh nét trên màn hình retina
+  const hasCashFund = cashFundRemaining !== null && cashFundRemaining !== undefined;
 
   // --- Bước 1: đo trước chiều cao cần thiết bằng cách render thử trên canvas tạm ---
   const { rows: catRows, grandTotal } = computeCategoryTotals(expenses);
@@ -447,6 +452,7 @@ function generateSummaryImage(trip, expenses, balances, settlements) {
     estHeight += donutBlockHeight + 28;
   }
   estHeight += 22 + trip.members.length * 26 + 6 + 28; // số dư + line
+  if (hasCashFund) estHeight += 22 + 26 + 10 + 28; // khối quỹ tiền mặt + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
   estHeight += 20; // footer + padding đáy
 
@@ -573,6 +579,27 @@ function generateSummaryImage(trip, expenses, balances, settlements) {
   ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
   y += 28;
 
+  // --- Quỹ tiền mặt chung (nếu có) ---
+  if (hasCashFund) {
+    ctx.fillStyle = '#9295B0';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.fillText('QUỸ TIỀN MẶT CHUNG', PAD, y);
+    y += 22;
+    const fundRounded = Math.round(cashFundRemaining);
+    ctx.fillStyle = '#1A1A2E';
+    ctx.font = '500 14px -apple-system, sans-serif';
+    ctx.fillText('Còn lại trong quỹ', PAD, y);
+    ctx.fillStyle = fundRounded >= 0 ? '#1A9461' : '#D6453A';
+    ctx.font = '700 14px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmt(fundRounded), W - PAD, y);
+    ctx.textAlign = 'left';
+    y += 26 + 10;
+    ctx.strokeStyle = '#E3E5F2';
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+    y += 28;
+  }
+
   // --- Kết quả thanh toán ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '600 11px -apple-system, sans-serif';
@@ -637,13 +664,44 @@ function computeBalances(members, expenses) {
   const balances = {};
   members.forEach(m => balances[m] = 0);
   expenses.forEach(exp => {
-    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
     const amt = exp.amountVND ?? exp.amount;
-    const share = amt / splitMembers.length;
     balances[exp.paidBy] = (balances[exp.paidBy] || 0) + amt;
+    // Khoản góp quỹ (category 'fund') chỉ cộng cho người góp, không chia/trừ cho ai -
+    // đây là tiền "nạp vào ví chung", khác với chi tiêu thường phải chia đều.
+    if (exp.category === 'fund') return;
+    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
+    const share = amt / splitMembers.length;
     splitMembers.forEach(m => { balances[m] = (balances[m] || 0) - share; });
   });
   return balances;
+}
+
+// Tách riêng số dư của "Quỹ chung" (tiền mặt) ra khỏi bảng số dư của người thật,
+// vì Quỹ chung không phải thành viên - không nên xuất hiện trong settlement
+// dạng "ai chuyển cho ai". Trả về số dư quỹ (tổng góp - tổng chi) và bảng
+// balances còn lại chỉ gồm người thật.
+function splitCashFundBalance(balances) {
+  // Lưu ý: balances[CASH_FUND_NAME] KHÔNG phải số tiền mặt còn lại trong quỹ -
+  // nó chỉ là "phần Quỹ chung đã chi hộ, đang được nợ lại" theo công thức kế toán nội bộ.
+  // Số tiền mặt thực tế còn lại phải tính riêng ở computeCashFundRemaining().
+  const peopleBalances = {};
+  Object.entries(balances).forEach(([name, bal]) => {
+    if (name !== CASH_FUND_NAME) peopleBalances[name] = bal;
+  });
+  return { peopleBalances };
+}
+
+// Tính đúng số tiền mặt còn lại trong quỹ chung = tổng đã góp (category 'fund')
+// trừ tổng đã chi ra từ quỹ (paidBy = Quỹ chung, không phải khoản fund).
+function computeCashFundRemaining(expenses) {
+  let totalContributed = 0;
+  let totalSpent = 0;
+  expenses.forEach(exp => {
+    const amt = exp.amountVND ?? exp.amount;
+    if (exp.category === 'fund') totalContributed += amt;
+    if (exp.paidBy === CASH_FUND_NAME && exp.category !== 'fund') totalSpent += amt;
+  });
+  return totalContributed - totalSpent;
 }
 
 function simplifyDebts(balances) {
@@ -694,11 +752,13 @@ let memberInput = '';
 let newTripName = '';
 let newTripUseForeign = false;
 let newTripCurrency = 'USD';
+let newTripCustomCurrency = '';
 let newTripRate = '';
 let renameTripDraft = '';
 let renameTripUseForeign = false;
 let renameTripCurrency = 'USD';
 let renameTripRate = '';
+let renameTripCustomCurrency = '';
 let editMemberDraft = { oldName: '', newName: '' };
 let expenseFilter = { person: '', category: '' };
 let showArchivedList = false;
@@ -903,7 +963,7 @@ function render() {
           html += `<div class="expense-row">
             <div class="expense-main">
               <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
-              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · chia ${e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm'}</div>
+              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? 'góp vào quỹ chung' : 'chia ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm')}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
               <span class="amount">${isForeign
@@ -927,13 +987,16 @@ function render() {
     }
 
     if (trip.members.length > 0) {
-      const balances = computeBalances(trip.members, expenses);
-      const settlements = simplifyDebts(balances);
+      const rawBalances = computeBalances(trip.members, expenses);
+      const { peopleBalances } = splitCashFundBalance(rawBalances);
+      const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+      const cashFundRemaining = computeCashFundRemaining(expenses);
+      const settlements = simplifyDebts(peopleBalances);
 
       html += `<div class="card">
         <div class="card-head"><span class="card-title">Số dư từng người</span></div>`;
       trip.members.forEach(m => {
-        const bal = Math.round(balances[m] || 0);
+        const bal = Math.round(peopleBalances[m] || 0);
         const cls = bal > 100 ? 'balance-pos' : bal < -100 ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
         const note = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
@@ -943,6 +1006,20 @@ function render() {
         </div>`;
       });
       html += `</div>`;
+
+      if (hasCashFund) {
+        const fundRounded = Math.round(cashFundRemaining);
+        const fundCls = fundRounded >= 0 ? 'balance-pos' : 'balance-neg';
+        const fundNote = fundRounded >= 0 ? 'tiền mặt còn lại trong quỹ' : 'quỹ đã chi vượt số đã góp';
+        html += `<div class="card">
+          <div class="card-head"><span class="card-title">💰 Quỹ tiền mặt chung</span></div>
+          <div class="balance-row" style="border-bottom:none;">
+            <span class="balance-name">Còn lại trong quỹ</span>
+            <span class="balance-amt ${fundCls}">${fmt(fundRounded)}</span>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${fundNote}</div>
+        </div>`;
+      }
 
       html += `<div class="card">
         <div class="card-head">
@@ -1027,7 +1104,14 @@ function handleAction(e) {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
     renameTripUseForeign = !!trip.foreign_currency;
-    renameTripCurrency = trip.foreign_currency || 'USD';
+    const isKnownCurrency = CURRENCIES.some(c => c.code === trip.foreign_currency);
+    if (trip.foreign_currency && !isKnownCurrency) {
+      renameTripCurrency = '__custom__';
+      renameTripCustomCurrency = trip.foreign_currency;
+    } else {
+      renameTripCurrency = trip.foreign_currency || 'USD';
+      renameTripCustomCurrency = '';
+    }
     renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
     modal = 'renameTrip'; render();
   }
@@ -1140,16 +1224,22 @@ function handleAction(e) {
   if (action === 'exportImage') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const expenses = getExpensesForTrip(trip);
-    const balances = computeBalances(trip.members, expenses);
-    const settlements = simplifyDebts(balances);
-    generateSummaryImage(trip, expenses, balances, settlements);
+    const rawBalances = computeBalances(trip.members, expenses);
+    const { peopleBalances } = splitCashFundBalance(rawBalances);
+    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(expenses);
+    const settlements = simplifyDebts(peopleBalances);
+    generateSummaryImage(trip, expenses, peopleBalances, settlements, hasCashFund ? cashFundRemaining : null);
   }
 
   if (action === 'exportCsv') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const expenses = getExpensesForTrip(trip);
-    const balances = computeBalances(trip.members, expenses);
-    const settlements = simplifyDebts(balances);
+    const rawBalances = computeBalances(trip.members, expenses);
+    const { peopleBalances } = splitCashFundBalance(rawBalances);
+    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(expenses);
+    const settlements = simplifyDebts(peopleBalances);
 
     function csvEscape(val) {
       const s = String(val ?? '');
@@ -1162,17 +1252,22 @@ function handleAction(e) {
     let rows = [];
     rows.push(['Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả', 'Số tiền gốc', 'Đơn vị', 'Số tiền (VNĐ)', 'Chia cho']);
     expenses.slice().reverse().forEach(ex => {
+      const isFund = ex.category === 'fund';
       rows.push([
         ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
         ex.desc || '', ex.amount, ex.currency || 'VNĐ', Math.round(ex.amountVND),
-        ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm',
+        isFund ? 'Không chia (góp quỹ)' : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm'),
       ]);
     });
     rows.push([]);
     rows.push(['Số dư từng người']);
     trip.members.forEach(m => {
-      rows.push([m, Math.round(balances[m] || 0)]);
+      rows.push([m, Math.round(peopleBalances[m] || 0)]);
     });
+    if (hasCashFund) {
+      rows.push([]);
+      rows.push(['Quỹ tiền mặt chung', Math.round(cashFundRemaining)]);
+    }
     rows.push([]);
     rows.push(['Kết quả thanh toán']);
     if (settlements.length === 0) {
@@ -1197,8 +1292,11 @@ function handleAction(e) {
   if (action === 'copySummary') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const expenses = getExpensesForTrip(trip);
-    const balances = computeBalances(trip.members, expenses);
-    const settlements = simplifyDebts(balances);
+    const rawBalances = computeBalances(trip.members, expenses);
+    const { peopleBalances } = splitCashFundBalance(rawBalances);
+    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(expenses);
+    const settlements = simplifyDebts(peopleBalances);
     let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
     expenses.slice().reverse().forEach(ex => {
       const amountText = ex.currency
@@ -1208,9 +1306,12 @@ function handleAction(e) {
     });
     text += '\nSố dư từng người:\n';
     trip.members.forEach(m => {
-      const bal = Math.round(balances[m] || 0);
+      const bal = Math.round(peopleBalances[m] || 0);
       text += `${m}: ${bal > 0 ? '+' : ''}${fmt(bal)}\n`;
     });
+    if (hasCashFund) {
+      text += `\nQuỹ tiền mặt chung còn lại: ${fmt(Math.round(cashFundRemaining))}\n`;
+    }
     text += '\nKết quả thanh toán:\n';
     if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
     else settlements.forEach(s => { text += `${s.from} chuyển ${s.to}: ${fmt(s.amount)}\n`; });
@@ -1245,13 +1346,19 @@ function renderModal() {
           <label>Đơn vị ngoại tệ</label>
           <select id="newTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+            <option value="__custom__" ${newTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
-          <label>1 ${escapeHtml(newTripCurrency)} = ? đ</label>
+          <label>1 ${escapeHtml(newTripCurrency === '__custom__' ? (newTripCustomCurrency || '?') : newTripCurrency)} = ? đ</label>
           <input id="newTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(newTripRate)}">
         </div>
       </div>
+      ${newTripCurrency === '__custom__' ? `
+      <div class="field">
+        <label>Mã/ký hiệu tiền tệ</label>
+        <input id="newTripCustomCurrencyInput" placeholder="ví dụ LAK, MYR, Kip..." value="${escapeHtml(newTripCustomCurrency)}">
+      </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
         Tỷ giá áp dụng chung cho cả trip, có thể sửa lại sau trong phần sửa tên trip.
       </div>` : ''}
@@ -1281,13 +1388,19 @@ function renderModal() {
           <label>Đơn vị ngoại tệ</label>
           <select id="renameTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === renameTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+            <option value="__custom__" ${renameTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
-          <label>1 ${escapeHtml(renameTripCurrency)} = ? đ</label>
+          <label>1 ${escapeHtml(renameTripCurrency === '__custom__' ? (renameTripCustomCurrency || '?') : renameTripCurrency)} = ? đ</label>
           <input id="renameTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(renameTripRate)}">
         </div>
       </div>
+      ${renameTripCurrency === '__custom__' ? `
+      <div class="field">
+        <label>Mã/ký hiệu tiền tệ</label>
+        <input id="renameTripCustomCurrencyInput" placeholder="ví dụ LAK, MYR, Kip..." value="${escapeHtml(renameTripCustomCurrency)}">
+      </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
         Đổi tỷ giá sẽ áp dụng lại cho mọi chi tiêu ngoại tệ đã ghi trong trip này.
       </div>` : ''}
@@ -1326,6 +1439,7 @@ function renderModal() {
         <label>Ai trả</label>
         <select id="paidBySelect">
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+          <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>💰 ${CASH_FUND_NAME} (tiền mặt)</option>
         </select>
       </div>
       <div class="row" style="gap:8px;">
@@ -1364,12 +1478,16 @@ function renderModal() {
           ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
         </select>
       </div>
+      ${expDraft.category === 'fund' ? `
+      <div style="font-size:12px; color:var(--text-muted); margin:-6px 0 14px;">
+        Khoản góp quỹ chỉ cộng vào số dư của người góp, không chia cho ai.
+      </div>` : `
       <div class="field">
         <label>Chia cho (bỏ trống = cả nhóm)</label>
         <div class="row">
           ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
         </div>
-      </div>
+      </div>`}
       <div class="row" style="justify-content:flex-end; margin-top: 8px;">
         <button onclick="window.app.closeModal()">Hủy</button>
         <button class="primary" onclick="window.app.submitExpense()">${isEditing ? 'Lưu thay đổi' : 'Lưu chi tiêu'}</button>
@@ -1392,6 +1510,15 @@ function renderModal() {
     if (curSelect) curSelect.addEventListener('change', e => { newTripCurrency = e.target.value; renderModal(); });
     const rateInput = document.getElementById('newTripRateInput');
     if (rateInput) rateInput.addEventListener('input', e => newTripRate = e.target.value);
+    const customCurInput = document.getElementById('newTripCustomCurrencyInput');
+    if (customCurInput) {
+      customCurInput.addEventListener('input', e => {
+        newTripCustomCurrency = e.target.value.trim().toUpperCase();
+        const labelEl = rateInput && rateInput.closest('.field').querySelector('label');
+        if (labelEl) labelEl.innerHTML = `1 ${newTripCustomCurrency || '?'} = ? đ`;
+      });
+      customCurInput.focus();
+    }
   }
   if (modal === 'renameTrip') {
     const inp = document.getElementById('renameTripInput');
@@ -1405,6 +1532,15 @@ function renderModal() {
     if (curSelect2) curSelect2.addEventListener('change', e => { renameTripCurrency = e.target.value; renderModal(); });
     const rateInput2 = document.getElementById('renameTripRateInput');
     if (rateInput2) rateInput2.addEventListener('input', e => renameTripRate = e.target.value);
+    const customCurInput2 = document.getElementById('renameTripCustomCurrencyInput');
+    if (customCurInput2) {
+      customCurInput2.addEventListener('input', e => {
+        renameTripCustomCurrency = e.target.value.trim().toUpperCase();
+        const labelEl = rateInput2 && rateInput2.closest('.field').querySelector('label');
+        if (labelEl) labelEl.innerHTML = `1 ${renameTripCustomCurrency || '?'} = ? đ`;
+      });
+      customCurInput2.focus();
+    }
   }
   if (modal === 'editMember') {
     const inp = document.getElementById('editMemberInput');
@@ -1451,7 +1587,7 @@ function renderModal() {
     });
 
     document.getElementById('descInput').addEventListener('input', e => expDraft.desc = e.target.value);
-    document.getElementById('categorySelect').addEventListener('change', e => expDraft.category = e.target.value);
+    document.getElementById('categorySelect').addEventListener('change', e => { expDraft.category = e.target.value; renderModal(); });
     overlay.querySelectorAll('[data-toggle-member]').forEach(el => {
       el.addEventListener('click', () => {
         const m = el.dataset.toggleMember;
@@ -1485,8 +1621,13 @@ window.app = {
   createTrip() {
     const name = newTripName.trim();
     if (!name) return;
+    if (newTripUseForeign && newTripCurrency === '__custom__' && !newTripCustomCurrency.trim()) {
+      showToast('Nhập mã/ký hiệu tiền tệ trước khi tạo trip');
+      return;
+    }
     const id = uid();
-    const foreignCurrency = newTripUseForeign ? newTripCurrency : '';
+    const resolvedCurrency = newTripCurrency === '__custom__' ? newTripCustomCurrency.trim().toUpperCase() : newTripCurrency;
+    const foreignCurrency = newTripUseForeign ? resolvedCurrency : '';
     const exchangeRate = newTripUseForeign ? (parseFloat(newTripRate) || '') : '';
     modal = null;
     withSaving(
@@ -1498,15 +1639,21 @@ window.app = {
     );
     newTripUseForeign = false;
     newTripCurrency = 'USD';
+    newTripCustomCurrency = '';
     newTripRate = '';
   },
 
   renameTrip() {
     const name = renameTripDraft.trim();
     if (!name) return;
+    if (renameTripUseForeign && renameTripCurrency === '__custom__' && !renameTripCustomCurrency.trim()) {
+      showToast('Nhập mã/ký hiệu tiền tệ trước khi lưu');
+      return;
+    }
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     const oldCurrency = trip.foreign_currency || '';
-    const newCurrency = renameTripUseForeign ? renameTripCurrency : '';
+    const resolvedCurrency = renameTripCurrency === '__custom__' ? renameTripCustomCurrency.trim().toUpperCase() : renameTripCurrency;
+    const newCurrency = renameTripUseForeign ? resolvedCurrency : '';
     const newRate = renameTripUseForeign ? (parseFloat(renameTripRate) || '') : '';
 
     // Nếu trip đã có chi tiêu dùng ngoại tệ cũ, không cho đổi sang mã khác
@@ -1590,6 +1737,10 @@ window.app = {
     }
     modal = null;
     const isEditing = !!expDraft.id;
+    const isFund = expDraft.category === 'fund';
+    // Khoản góp quỹ chỉ cộng cho người góp, không chia cho ai khác -
+    // tận dụng cơ chế splitWith sẵn có bằng cách gán đúng 1 người là chính họ.
+    const splitWith = isFund ? [] : expDraft.splitWith;
     const expenseData = {
       expense_id: isEditing ? expDraft.id : uid(),
       trip_id: activeTripId,
@@ -1597,7 +1748,7 @@ window.app = {
       amount: amt,
       currency: expDraft.currency || '',
       desc: expDraft.desc.trim(),
-      split_with: expDraft.splitWith.join(','),
+      split_with: splitWith.join(','),
       date: expDraft.date,
       time: expDraft.time || '',
       category: expDraft.category || '',
