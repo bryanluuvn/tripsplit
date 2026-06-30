@@ -244,6 +244,20 @@
   .balance-neg { color: var(--danger); }
   .balance-note { color: var(--text-muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
 
+  .overview-head-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+    padding: 0 0 6px; gap: 4px;
+  }
+  .overview-head-label {
+    font-size: 10.5px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.02em; text-align: right;
+  }
+  .overview-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+    align-items: center; padding: 6px 0; gap: 4px; font-size: 13px;
+  }
+  .overview-val { text-align: right; font-variant-numeric: tabular-nums; }
+
   .icon-btn {
     border: none; background: none; padding: 6px; cursor: pointer; display: inline-flex;
     color: var(--text-muted); border-radius: var(--radius-sm); transition: all 0.12s ease;
@@ -469,11 +483,14 @@ function renderDailyChart(expenses) {
   const { days, maxTotal } = computeDailyCategoryTotals(expenses);
   if (days.length === 0) return '';
 
-  const CHART_H = 140; // chiều cao vùng vẽ cột, px
+  const CHART_H = 140; // chiều cao vùng vẽ cột (không tính label số tiền/ngày), px
+  const LABEL_TOP_H = 16; // label số tiền phía trên cột
+  const LABEL_BOTTOM_H = 18; // label ngày phía dưới cột
+  const TOTAL_H = CHART_H + LABEL_TOP_H + LABEL_BOTTOM_H;
 
   let html = `<div class="card">
     <div class="card-head"><span class="card-title">Chi tiêu theo ngày</span></div>
-    <div style="display:flex; align-items:flex-end; gap:6px; height:${CHART_H}px; overflow-x:auto; padding-bottom:2px;">`;
+    <div style="display:flex; align-items:flex-end; gap:10px; height:${TOTAL_H}px; overflow-x:auto; overflow-y:hidden; padding-bottom:2px; margin-top:6px;">`;
 
   days.forEach(d => {
     const barH = Math.max((d.total / maxTotal) * CHART_H, 4);
@@ -489,8 +506,9 @@ function renderDailyChart(expenses) {
     });
 
     const shortDate = d.date ? d.date.slice(5).replace('-', '/') : '?'; // "2026-06-29" -> "06/29"
-    html += `<div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:34px;">
-      <div style="display:flex; flex-direction:column-reverse; width:20px; height:${CHART_H}px; border-radius:4px 4px 0 0; overflow:hidden;">
+    html += `<div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:42px;">
+      <div style="font-size:10.5px; font-weight:600; color:var(--text-primary); margin-bottom:3px; white-space:nowrap;">${fmt(d.total)}</div>
+      <div style="display:flex; flex-direction:column-reverse; width:26px; height:${CHART_H}px; border-radius:4px 4px 0 0; overflow:hidden;">
         ${segmentsHtml}
       </div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px; white-space:nowrap;">${escapeHtml(shortDate)}</div>
@@ -773,6 +791,19 @@ function computeUsage(members, expenses) {
     splitMembers.forEach(m => { usage[m] = (usage[m] || 0) + share; });
   });
   return usage;
+}
+
+// Tổng số tiền mỗi người đã TRẢ RA (paidBy), không trừ phần chia của ai -
+// bao gồm cả khoản góp quỹ, vì đó cũng là tiền người đó đã bỏ ra.
+// Quan hệ: Đã chi - Đã dùng = Số dư (balances).
+function computePaid(members, expenses) {
+  const paid = {};
+  members.forEach(m => paid[m] = 0);
+  expenses.forEach(exp => {
+    const amt = exp.amountVND ?? exp.amount;
+    paid[exp.paidBy] = (paid[exp.paidBy] || 0) + amt;
+  });
+  return paid;
 }
 
 // Tách riêng số dư của "Quỹ chung" (tiền mặt) ra khỏi bảng số dư của người thật,
@@ -1113,37 +1144,31 @@ function render() {
       const cashFundRemaining = computeCashFundRemaining(expenses);
       const settlements = simplifyDebts(peopleBalances);
 
+      const usage = computeUsage(trip.members, expenses);
+      const paid = computePaid(trip.members, expenses);
+
       html += `<div class="card">
-        <div class="card-head"><span class="card-title">Số dư từng người</span></div>`;
+        <div class="card-head"><span class="card-title">Tổng quan từng người</span></div>
+        <div class="overview-head-row">
+          <span></span>
+          <span class="overview-head-label">Đã chi</span>
+          <span class="overview-head-label">Đã dùng</span>
+          <span class="overview-head-label">Số dư</span>
+        </div>`;
       trip.members.forEach(m => {
         const bal = Math.round(peopleBalances[m] || 0);
         const cls = bal > 100 ? 'balance-pos' : bal < -100 ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
         const note = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
-        html += `<div class="balance-row">
+        html += `<div class="overview-row">
           <span class="balance-name">${escapeHtml(m)}</span>
-          <span class="balance-amt ${cls}">${sign}${fmt(bal)}<span class="balance-note">${note}</span></span>
-        </div>`;
+          <span class="overview-val">${fmt(paid[m] || 0)}</span>
+          <span class="overview-val">${fmt(usage[m] || 0)}</span>
+          <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmt(bal)}</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:-4px; margin-bottom:4px;">${note}</div>`;
       });
-      html += `</div>`;
-
-      const usage = computeUsage(trip.members, expenses);
-      const maxUsage = Math.max(...trip.members.map(m => usage[m] || 0), 1);
-      html += `<div class="card">
-        <div class="card-head"><span class="card-title">Số tiền đã sử dụng</span></div>`;
-      trip.members
-        .slice()
-        .sort((a, b) => (usage[b] || 0) - (usage[a] || 0))
-        .forEach(m => {
-          const u = usage[m] || 0;
-          const pct = maxUsage > 0 ? (u / maxUsage) * 100 : 0;
-          html += `<div class="cat-chart-row" style="padding:8px 0;">
-            <span class="cat-chart-label" style="width:80px;">${escapeHtml(m)}</span>
-            <span class="cat-chart-bar-track"><span class="cat-chart-bar-fill" style="width:${Math.max(pct, 3)}%; background:var(--accent);"></span></span>
-            <span class="cat-chart-amt">${fmt(u)}</span>
-          </div>`;
-        });
-      html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:8px;">Tổng phần mỗi người thực dùng trong các khoản chi tiêu (không tính tiền góp quỹ)</div>`;
+      html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:6px; padding-top:8px; border-top:1px solid var(--border);">Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.</div>`;
       html += `</div>`;
 
       if (hasCashFund) {
