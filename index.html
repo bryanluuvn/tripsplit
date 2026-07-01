@@ -540,8 +540,12 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   const PAD = 36;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  const scale = 2; // render @2x cho ảnh nét trên màn hình retina
+  const scale = 2;
   const hasCashFund = Array.isArray(cashFundRemaining) && cashFundRemaining.length > 0;
+
+  // Tính thêm paid và usage để vẽ bảng đầy đủ 3 cột
+  const paid = computePaid(trip.members, expenses);
+  const usage = computeUsage(trip.members, expenses);
 
   // --- Bước 1: đo trước chiều cao cần thiết bằng cách render thử trên canvas tạm ---
   const { rows: catRows, grandTotal } = computeCategoryTotals(expenses);
@@ -551,7 +555,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     const donutBlockHeight = Math.max(108, catRows.length * 26 + 8);
     estHeight += donutBlockHeight + 28;
   }
-  estHeight += 22 + trip.members.length * 26 + 6 + 28; // số dư + line
+  estHeight += 22 + 20 + trip.members.length * 26 + 6 + 28; // header tổng quan + dòng thành viên + line
   if (hasCashFund) estHeight += 22 + cashFundRemaining.length * 26 + 10 + 28; // khối quỹ tiền mặt (1 dòng/đơn vị) + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
   estHeight += 20; // footer + padding đáy
@@ -655,22 +659,43 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     y += 28;
   }
 
-  // --- Số dư từng người ---
+  // --- Tổng quan từng người (4 cột: Tên / Đã chi / Đã dùng / Số dư) ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '600 11px -apple-system, sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('SỐ DƯ TỪNG NGƯỜI', PAD, y);
-  y += 22;
+  ctx.fillText('TỔNG QUAN TỪNG NGƯỜI', PAD, y);
+  y += 20;
+
+  // Header hàng cột
+  const COL1 = PAD; // Tên (flex left)
+  const COL2 = W - PAD - 260; // Đã chi
+  const COL3 = W - PAD - 160; // Đã dùng
+  const COL4 = W - PAD;       // Số dư (right-aligned)
+  ctx.fillStyle = '#9295B0';
+  ctx.font = '500 11px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('ĐÃ CHI', COL2, y);
+  ctx.fillText('ĐÃ DÙNG', COL3, y);
+  ctx.fillText('SỐ DƯ', COL4, y);
+  ctx.textAlign = 'left';
+  y += 18;
+
   trip.members.forEach(m => {
     const bal = Math.round(balances[m] || 0);
     const isPos = bal > 100, isNeg = bal < -100;
+
     ctx.fillStyle = '#1A1A2E';
     ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText(m, PAD, y);
+    ctx.fillText(m, COL1, y);
+
+    ctx.textAlign = 'right';
+    ctx.font = '500 13px -apple-system, sans-serif';
+    ctx.fillStyle = '#5F6275';
+    ctx.fillText(fmt(paid[m] || 0), COL2, y);
+    ctx.fillText(fmt(usage[m] || 0), COL3, y);
     ctx.fillStyle = isPos ? '#1A9461' : isNeg ? '#D6453A' : '#9295B0';
     ctx.font = '600 14px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText((bal > 0 ? '+' : '') + fmt(bal), W - PAD, y);
+    ctx.fillText((bal > 0 ? '+' : '') + fmt(bal), COL4, y);
     ctx.textAlign = 'left';
     y += 26;
   });
@@ -1172,6 +1197,7 @@ function render() {
         <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:-4px; margin-bottom:4px;">${note}</div>`;
       });
       html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:6px; padding-top:8px; border-top:1px solid var(--border);">Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.</div>`;
+      html += `<div style="font-size:11.5px; color:var(--accent-text); margin-top:5px;">👆 Bấm vào tên để xem chi tiết giao dịch của từng người</div>`;
       html += `</div>`;
 
       if (hasCashFund) {
@@ -1436,6 +1462,8 @@ function handleAction(e) {
     const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
     const settlements = simplifyDebts(peopleBalances);
+    const usage = computeUsage(trip.members, expenses);
+    const paid = computePaid(trip.members, expenses);
 
     function csvEscape(val) {
       const s = String(val ?? '');
@@ -1445,21 +1473,45 @@ function handleAction(e) {
       return s;
     }
 
+    const members = trip.members;
+
     let rows = [];
-    rows.push(['Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả', 'Số tiền gốc', 'Đơn vị', 'Số tiền (VNĐ)', 'Chia cho']);
+    // ---- Raw data: header + cột động theo từng thành viên ----
+    rows.push([
+      'Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả',
+      'Số tiền gốc', 'Đơn vị', 'Số tiền (VNĐ)', 'Chia cho',
+      ...members.map(m => `Phần của ${m} (VNĐ)`),
+    ]);
     expenses.slice().reverse().forEach(ex => {
       const isFund = ex.category === 'fund';
+      const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
+      const share = ex.amountVND / splitMembers.length;
+      // Mỗi thành viên: nếu có phần trong giao dịch này thì điền số tiền, không thì rỗng
+      const memberShares = members.map(m => {
+        if (isFund) return '';
+        return splitMembers.includes(m) ? Math.round(share) : '';
+      });
       rows.push([
         ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
         ex.desc || '', ex.amount, ex.currency || 'VNĐ', Math.round(ex.amountVND),
         isFund ? 'Không chia (góp quỹ)' : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm'),
+        ...memberShares,
       ]);
     });
+
+    // ---- Tổng quan từng người: 4 cột ----
     rows.push([]);
-    rows.push(['Số dư từng người']);
-    trip.members.forEach(m => {
-      rows.push([m, Math.round(peopleBalances[m] || 0)]);
+    rows.push(['Tổng quan từng người', 'Đã chi (VNĐ)', 'Đã dùng (VNĐ)', 'Số dư (VNĐ)']);
+    members.forEach(m => {
+      rows.push([
+        m,
+        Math.round(paid[m] || 0),
+        Math.round(usage[m] || 0),
+        Math.round(peopleBalances[m] || 0),
+      ]);
     });
+
+    // ---- Quỹ tiền mặt chung ----
     if (hasCashFund) {
       rows.push([]);
       rows.push(['Quỹ tiền mặt chung']);
@@ -1467,6 +1519,8 @@ function handleAction(e) {
         rows.push([`Còn lại (${r.label})`, r.currency ? r.remaining : Math.round(r.remaining)]);
       });
     }
+
+    // ---- Kết quả thanh toán ----
     rows.push([]);
     rows.push(['Kết quả thanh toán']);
     if (settlements.length === 0) {
