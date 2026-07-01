@@ -382,11 +382,18 @@ const CATEGORIES = [
   { id: 'transport', label: 'Di chuyển', color: '#3266E0', bg: '#E8EDFC', text: '#2348AD' },
   { id: 'stay', label: 'Chỗ ở', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
   { id: 'activity', label: 'Vui chơi', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
+  { id: 'shopping', label: 'Mua sắm', color: '#7C3AED', bg: '#EDE9FE', text: '#5B21B6' },
   { id: 'fund', label: 'Góp quỹ', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
+  { id: 'payment', label: 'Thanh toán', color: '#0E7490', bg: '#E0F2FE', text: '#0C5068' },
 ];
 // Tên thành viên đặc biệt đóng vai "người trả" khi chi tiêu bằng tiền mặt từ quỹ chung.
 // Không phải người thật - bị lọc riêng khỏi bảng số dư/settlement hiển thị cho người dùng.
 const CASH_FUND_NAME = 'Quỹ chung';
+// Các category không phải "chi tiêu thật" - loại trừ khỏi chart, tổng chi, usage...
+// fund: góp tiền vào quỹ chung (chỉ cộng cho người góp, không chia ai)
+// payment: thanh toán công nợ giữa 2 người (chia bình thường nhưng loại khỏi chart)
+const NON_SPENDING_CATEGORIES = new Set(['fund', 'payment']);
+function isNonSpending(category) { return NON_SPENDING_CATEGORIES.has(category); }
 function categoryLabel(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.label : 'Khác';
@@ -410,9 +417,9 @@ function computeCategoryTotals(expenses) {
   const totals = {};
   let grandTotal = 0;
   expenses.forEach(e => {
-    // Bỏ qua khoản góp quỹ - đây không phải "chi tiêu", mà là tiền nạp vào quỹ,
-    // đưa vào sẽ làm méo tỷ lệ % của các loại chi tiêu thật.
-    if (e.category === 'fund') return;
+    // Bỏ qua các khoản không phải chi tiêu thật (góp quỹ, thanh toán công nợ)
+    // để không làm méo tỷ lệ % của các loại chi tiêu thực sự.
+    if (isNonSpending(e.category)) return;
     const key = e.category || '';
     const amt = e.amountVND ?? e.amount;
     totals[key] = (totals[key] || 0) + amt;
@@ -429,7 +436,7 @@ function computeCategoryTotals(expenses) {
 function computeDailyCategoryTotals(expenses) {
   const byDate = {}; // date -> { total, byCategory: { catId: amt } }
   expenses.forEach(e => {
-    if (e.category === 'fund') return;
+    if (isNonSpending(e.category)) return;
     const amt = e.amountVND ?? e.amount;
     const date = e.date || '';
     if (!byDate[date]) byDate[date] = { date, total: 0, byCategory: {} };
@@ -813,13 +820,13 @@ function computeBalances(members, expenses) {
 }
 
 // Tính tổng số tiền mỗi người đã THỰC SỰ DÙNG (phần chia trong mỗi khoản chi),
-// khác với balances (vốn là đã trả - đã dùng). Khoản góp quỹ không tính cho ai,
-// vì đó không phải tiêu dùng.
+// khác với balances (vốn là đã trả - đã dùng). Khoản góp quỹ và thanh toán
+// không tính vào đây vì không phải tiêu dùng thật.
 function computeUsage(members, expenses) {
   const usage = {};
   members.forEach(m => usage[m] = 0);
   expenses.forEach(exp => {
-    if (exp.category === 'fund') return;
+    if (isNonSpending(exp.category)) return;
     const amt = exp.amountVND ?? exp.amount;
     const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
     const share = amt / splitMembers.length;
@@ -1267,7 +1274,7 @@ function render() {
           html += `<div class="expense-row">
             <div class="expense-main">
               <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
-              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? 'góp vào quỹ chung' : 'chia ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm')}</div>
+              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? 'góp vào quỹ chung' : e.category === 'payment' ? 'thanh toán cho ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : 'chia ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm')}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
               <span class="amount">${isForeign
@@ -1887,6 +1894,13 @@ function renderModal() {
       ${expDraft.category === 'fund' ? `
       <div style="font-size:12px; color:var(--text-muted); margin:-6px 0 14px;">
         Khoản góp quỹ chỉ cộng vào số dư của người góp, không chia cho ai.
+      </div>` : expDraft.category === 'payment' ? `
+      <div class="field">
+        <label>Người nhận <span style="color:var(--danger); font-size:11px;">(bắt buộc chọn đúng 1 người)</span></label>
+        <div class="row">
+          ${trip.members.map(m => m === expDraft.paidBy ? '' : `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
+        </div>
+        <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">Khoản thanh toán loại trừ khỏi thống kê chi tiêu nhưng vẫn tính vào số dư.</div>
       </div>` : `
       <div class="field">
         <label>Chia cho (bỏ trống = cả nhóm)</label>
@@ -2096,7 +2110,7 @@ window.app = {
     // Lọc ra các giao dịch người này có phần (được chia vào, không tính góp quỹ)
     const myExpenses = expenses
       .filter(e => {
-        if (e.category === 'fund') return false;
+        if (isNonSpending(e.category)) return false;
         const splitMembers = e.splitWith.length > 0 ? e.splitWith : trip.members;
         return splitMembers.includes(memberName);
       })
@@ -2306,6 +2320,11 @@ window.app = {
     const amt = parseFloat(expDraft.amount);
     if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.date) {
       showToast('Điền đủ thông tin trước khi lưu');
+      return;
+    }
+    const isPayment = expDraft.category === 'payment';
+    if (isPayment && expDraft.splitWith.length !== 1) {
+      showToast('Khoản thanh toán phải chọn đúng 1 người nhận');
       return;
     }
     modal = null;
