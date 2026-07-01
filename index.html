@@ -1392,9 +1392,12 @@ function handleAction(e) {
   if (action === 'openAddExpense') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const now = new Date();
+    // Nếu trip đã có khoản góp quỹ (quỹ chung đã được khởi tạo),
+    // mặc định chọn "Quỹ chung" làm người trả vì đa số chi tiêu sẽ từ quỹ.
+    const hasFund = rawExpenses.some(e => e.trip_id === activeTripId && e.category === 'fund');
     expDraft = {
       id: null,
-      paidBy: trip.members[0] || '',
+      paidBy: hasFund ? CASH_FUND_NAME : (trip.members[0] || ''),
       amount: '', currency: trip.foreignCurrency || '', amountInputRaw: '', desc: '', splitWith: [],
       date: now.toISOString().slice(0, 10),
       time: nowTimeStr(),
