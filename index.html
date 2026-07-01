@@ -189,6 +189,13 @@
   .settlement-row:last-child { border-bottom: none; }
   .settlement-row .spacer { flex: 1; }
   .settlement-arrow { color: var(--accent-2); font-weight: 600; }
+  .settle-btn {
+    border: 1.5px solid var(--success); background: none; color: var(--success);
+    border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+  }
+  .settle-btn:hover { background: var(--success); color: white; }
 
   .empty {
     color: var(--text-muted); font-size: 13.5px; padding: 1.1rem 0; text-align: center;
@@ -1360,7 +1367,16 @@ function render() {
         html += `<p class="empty">Mọi người đã hòa sổ, không cần chuyển tiền.</p>`;
       } else {
         settlements.forEach(s => {
-          html += `<div class="settlement-row"><strong>${escapeHtml(s.from)}</strong> <span class="settlement-arrow">→</span> <strong>${escapeHtml(s.to)}</strong><span class="spacer"></span><strong>${fmt(s.amount)}</strong></div>`;
+          html += `<div class="settlement-row">
+            <strong>${escapeHtml(s.from)}</strong>
+            <span class="settlement-arrow">→</span>
+            <strong>${escapeHtml(s.to)}</strong>
+            <span class="spacer"></span>
+            <strong>${fmt(s.amount)}</strong>
+            <button class="settle-btn" data-action="markSettled"
+              data-from="${escapeHtml(s.from)}" data-to="${escapeHtml(s.to)}" data-amount="${Math.round(s.amount)}"
+              title="Đánh dấu đã thanh toán — tự tạo khoản Thanh toán tương ứng">✓</button>
+          </div>`;
         });
       }
       html += `</div>`;
@@ -1455,6 +1471,31 @@ function handleAction(e) {
   const member = e.currentTarget.dataset.member;
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
+
+  if (action === 'markSettled') {
+    const from = e.currentTarget.dataset.from;
+    const to = e.currentTarget.dataset.to;
+    const amount = parseInt(e.currentTarget.dataset.amount, 10);
+    const now = new Date();
+    const expenseData = {
+      expense_id: uid(),
+      trip_id: activeTripId,
+      paid_by: from,
+      amount,
+      currency: '',
+      desc: `Thanh toán cho ${to}`,
+      split_with: to,
+      date: now.toISOString().slice(0, 10),
+      time: nowTimeStr(),
+      category: 'payment',
+    };
+    withSaving(
+      () => rawExpenses.push({ ...expenseData }),
+      () => apiPost({ action: 'addExpense', ...expenseData })
+    );
+    showToast(`Đã ghi nhận: ${from} → ${to} ${fmt(amount)}`);
+    return;
+  }
   if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
