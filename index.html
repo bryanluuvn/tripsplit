@@ -1550,28 +1550,45 @@ function handleAction(e) {
     const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
     const settlements = simplifyDebts(peopleBalances);
+    const usage = computeUsage(trip.members, expenses);
+    const paid = computePaid(trip.members, expenses);
+
     let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
+
+    // Danh sách chi tiêu
     expenses.slice().reverse().forEach(ex => {
       const amountText = ex.currency
         ? `${ex.amount.toLocaleString('vi-VN')}${currencySymbol(ex.currency)} (≈${fmt(ex.amountVND)})`
         : fmt(ex.amountVND);
       text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${amountText}${ex.desc ? ' cho ' + ex.desc : ''}\n`;
     });
-    text += '\nSố dư từng người:\n';
+
+    // Bảng tổng quan 3 cột — pad bằng tab để thẳng hàng trong monospace font
+    text += '\nTổng quan:\n';
+    const maxNameLen = Math.max(...trip.members.map(m => m.length), 4);
+    const pad = (s, n) => String(s).padEnd(n);
+    text += `${pad('', maxNameLen + 2)}${pad('Đã chi', 10)}${pad('Đã dùng', 10)}Số dư\n`;
     trip.members.forEach(m => {
       const bal = Math.round(peopleBalances[m] || 0);
-      text += `${m}: ${bal > 0 ? '+' : ''}${fmt(bal)}\n`;
+      const note = bal > 100 ? ' (sẽ nhận lại)' : bal < -100 ? ' (cần trả thêm)' : ' (đã hòa sổ)';
+      const balStr = (bal > 0 ? '+' : '') + fmt(bal) + note;
+      text += `${pad(m, maxNameLen + 2)}${pad(fmt(paid[m] || 0), 10)}${pad(fmt(usage[m] || 0), 10)}${balStr}\n`;
     });
+
+    // Quỹ tiền mặt chung
     if (hasCashFund) {
       text += '\nQuỹ tiền mặt chung còn lại:\n';
       cashFundRemaining.forEach(r => {
         const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
-        text += `${r.label}: ${display}\n`;
+        text += `  ${r.label}: ${display}\n`;
       });
     }
+
+    // Kết quả thanh toán
     text += '\nKết quả thanh toán:\n';
     if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
-    else settlements.forEach(s => { text += `${s.from} chuyển ${s.to}: ${fmt(s.amount)}\n`; });
+    else settlements.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmt(s.amount)}\n`; });
+
     navigator.clipboard.writeText(text).then(() => showToast('Đã copy vào clipboard'));
   }
 }
