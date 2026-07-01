@@ -1164,7 +1164,7 @@ function render() {
         const sign = bal > 0 ? '+' : '';
         const note = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
         html += `<div class="overview-row">
-          <span class="balance-name">${escapeHtml(m)}</span>
+          <span class="balance-name" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" data-action="openMemberDetail" data-member="${escapeHtml(m)}" title="Xem chi tiết giao dịch của ${escapeHtml(m)}">${escapeHtml(m)}</span>
           <span class="overview-val">${fmt(paid[m] || 0)}</span>
           <span class="overview-val">${fmt(usage[m] || 0)}</span>
           <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmt(bal)}</span>
@@ -1290,7 +1290,9 @@ function handleAction(e) {
   const action = e.currentTarget.dataset.action;
   const id = e.currentTarget.dataset.id;
   const name = e.currentTarget.dataset.name;
+  const member = e.currentTarget.dataset.member;
 
+  if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
   if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
@@ -1854,9 +1856,14 @@ window.app = {
           Khi ai đó góp tiền vào quỹ chung của cả nhóm, chọn loại chi tiêu "Góp quỹ". Khi chi tiêu bằng tiền mặt từ quỹ, chọn "💰 Quỹ chung" ở mục "Ai trả". App tự tính số tiền mặt còn lại trong quỹ, tách riêng khỏi công nợ giữa mọi người.
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">6. Khác</p>
+        <p style="font-weight:600; margin-bottom:4px;">6. Xem chi tiết từng thành viên</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Bấm tên thành viên để sửa tên · bấm ✏️ trên chi tiêu để sửa lại · "Lưu trữ trip" để ẩn trip cũ khỏi danh sách chính mà không mất dữ liệu · bộ lọc theo người/loại chi tiêu nằm ngay trên danh sách chi tiêu.
+          Trong bảng "Tổng quan từng người", bấm vào <u>tên</u> bất kỳ thành viên nào để xem popup chi tiết — bao gồm số tiền đã chi/đã dùng/số dư, và danh sách đầy đủ các giao dịch mà người đó có phần, kèm đúng số tiền họ phải chịu trong từng giao dịch.
+        </p>
+
+        <p style="font-weight:600; margin-bottom:4px;">7. Khác</p>
+        <p style="margin-top:0; color:var(--text-secondary);">
+          Bấm tên thành viên trong card "Thành viên" để sửa tên · bấm ✏️ trên chi tiêu để sửa lại · "Lưu trữ trip" để ẩn trip cũ khỏi danh sách chính mà không mất dữ liệu · bộ lọc theo người/loại chi tiêu nằm ngay trên danh sách chi tiêu · bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác.
         </p>
 
       </div>
@@ -1871,6 +1878,97 @@ window.app = {
 
   closeHelp() {
     const overlay = document.getElementById('helpOverlay');
+    if (overlay) overlay.remove();
+  },
+
+  openMemberDetail(memberName) {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    if (!trip) return;
+    const expenses = getExpensesForTrip(trip);
+    const paid = computePaid(trip.members, expenses);
+    const usage = computeUsage(trip.members, expenses);
+    const rawBal = computeBalances(trip.members, expenses);
+    const { peopleBalances } = splitCashFundBalance(rawBal);
+
+    // Lọc ra các giao dịch người này có phần (được chia vào, không tính góp quỹ)
+    const myExpenses = expenses
+      .filter(e => {
+        if (e.category === 'fund') return false;
+        const splitMembers = e.splitWith.length > 0 ? e.splitWith : trip.members;
+        return splitMembers.includes(memberName);
+      })
+      .slice() // giữ nguyên order (mới nhất trước)
+
+    const bal = Math.round(peopleBalances[memberName] || 0);
+    const balCls = bal > 100 ? 'color:#1A9461' : bal < -100 ? 'color:#D6453A' : 'color:var(--text-muted)';
+    const balSign = bal > 0 ? '+' : '';
+    const balNote = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
+
+    let rowsHtml = '';
+    myExpenses.forEach(e => {
+      const splitMembers = e.splitWith.length > 0 ? e.splitWith : trip.members;
+      const myShare = e.amountVND / splitMembers.length;
+      const isPayer = e.paidBy === memberName;
+      rowsHtml += `<div style="padding:10px 0; border-bottom:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div style="flex:1; min-width:0;">
+            <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span>
+            <span style="font-size:13.5px;">${e.desc ? escapeHtml(e.desc) : escapeHtml(e.paidBy) + ' đã trả'}</span>
+            ${isPayer ? `<span style="font-size:11px; color:var(--accent-text); background:var(--accent-bg); padding:1px 5px; border-radius:4px; margin-left:4px;">người trả</span>` : ''}
+            <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${escapeHtml(e.date)} · ${escapeHtml(e.paidBy)} trả ${fmt(e.amountVND)} · chia ${splitMembers.length} người</div>
+          </div>
+          <div style="text-align:right; flex-shrink:0;">
+            <div style="font-size:14px; font-weight:600;">−${fmt(myShare)}</div>
+            <div style="font-size:11px; color:var(--text-muted);">phần của tôi</div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    if (myExpenses.length === 0) {
+      rowsHtml = `<p style="color:var(--text-muted); font-size:13.5px; text-align:center; padding:24px 0;">Chưa có giao dịch nào.</p>`;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'memberDetailOverlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="max-width:480px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <h2 style="margin:0;">👤 ${escapeHtml(memberName)}</h2>
+        <button class="icon-btn" onclick="window.app.closeMemberDetail()" aria-label="Đóng">✕</button>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:12px 0; padding:12px; background:var(--surface-2); border-radius:var(--radius-sm);">
+        <div style="text-align:center;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">ĐÃ CHI</div>
+          <div style="font-size:15px; font-weight:600;">${fmt(paid[memberName] || 0)}</div>
+        </div>
+        <div style="text-align:center; border-left:1px solid var(--border); border-right:1px solid var(--border);">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">ĐÃ DÙNG</div>
+          <div style="font-size:15px; font-weight:600;">${fmt(usage[memberName] || 0)}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">SỐ DƯ</div>
+          <div style="font-size:15px; font-weight:600; ${balCls}">${balSign}${fmt(bal)}</div>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--text-muted); text-align:center; margin-bottom:12px;">${balNote}</div>
+
+      <div style="font-weight:600; font-size:13px; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.03em;">Giao dịch có phần (${myExpenses.length})</div>
+      <div style="max-height:50vh; overflow-y:auto;">
+        ${rowsHtml}
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:14px;">
+        <button class="primary" onclick="window.app.closeMemberDetail()">Đóng</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) window.app.closeMemberDetail(); });
+  },
+
+  closeMemberDetail() {
+    const overlay = document.getElementById('memberDetailOverlay');
     if (overlay) overlay.remove();
   },
 
