@@ -156,11 +156,19 @@
 
   .member-tag {
     display: inline-flex; align-items: center; gap: 4px;
-    background: var(--surface-2); border-radius: 20px; padding: 6px 6px 6px 13px;
+    background: var(--surface-2); border-radius: 20px; padding: 6px 6px 6px 8px;
     font-size: 13.5px; font-weight: 500; color: var(--text-primary);
+    user-select: none; transition: opacity 0.15s, box-shadow 0.15s;
   }
   .member-tag button { height: auto; border: none; background: none; padding: 3px 6px; font-size: 13px; color: var(--text-muted); }
   .member-tag button:hover { color: var(--danger); background: none; }
+  .member-tag.dragging { opacity: 0.4; }
+  .member-tag.drag-over { box-shadow: -3px 0 0 2px var(--accent); }
+  .drag-handle {
+    cursor: grab; color: var(--text-muted); font-size: 14px; padding: 0 3px;
+    line-height: 1; touch-action: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
 
   .expense-row {
     display: flex; justify-content: space-between; align-items: flex-start;
@@ -1024,6 +1032,120 @@ function startPolling() {
   // intentionally empty
 }
 
+function initMemberDragSort() {
+  const container = document.querySelector('.member-sortable');
+  if (!container) return;
+  const tags = Array.from(container.querySelectorAll('.member-tag[draggable]'));
+  if (tags.length < 2) return;
+
+  let dragSrc = null;
+
+  function getNewOrder() {
+    return Array.from(container.querySelectorAll('.member-tag[data-member-name]'))
+      .map(el => el.dataset.memberName);
+  }
+
+  function saveMemberOrder(newOrder) {
+    const trip = rawTrips.find(t => t.trip_id === activeTripId);
+    if (!trip) return;
+    const oldMembers = trip.members;
+    withSaving(
+      () => { trip.members = newOrder.join(','); },
+      () => apiPost({ action: 'updateTripMembers', trip_id: activeTripId, members: newOrder.join(',') })
+    );
+  }
+
+  // ---- Mouse drag (desktop) ----
+  tags.forEach(tag => {
+    const handle = tag.querySelector('.drag-handle');
+    if (!handle) return;
+
+    tag.addEventListener('dragstart', e => {
+      dragSrc = tag;
+      tag.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    tag.addEventListener('dragend', () => {
+      tag.classList.remove('dragging');
+      container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      dragSrc = null;
+    });
+    tag.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (tag !== dragSrc) tag.classList.add('drag-over');
+    });
+    tag.addEventListener('dragleave', () => tag.classList.remove('drag-over'));
+    tag.addEventListener('drop', e => {
+      e.preventDefault();
+      tag.classList.remove('drag-over');
+      if (!dragSrc || dragSrc === tag) return;
+      // Chèn dragSrc vào trước tag hiện tại
+      container.insertBefore(dragSrc, tag);
+      saveMemberOrder(getNewOrder());
+    });
+  });
+
+  // ---- Touch drag (mobile) ----
+  tags.forEach(tag => {
+    const handle = tag.querySelector('.drag-handle');
+    if (!handle) return;
+
+    let startY = 0, startX = 0;
+    let isDragging = false;
+    let placeholder = null;
+    let clone = null;
+
+    handle.addEventListener('touchstart', e => {
+      const touch = e.touches[0];
+      startY = touch.clientY;
+      startX = touch.clientX;
+      isDragging = false;
+    }, { passive: true });
+
+    handle.addEventListener('touchmove', e => {
+      const touch = e.touches[0];
+      const dy = Math.abs(touch.clientY - startY);
+      const dx = Math.abs(touch.clientX - startX);
+      if (!isDragging && (dy > 5 || dx > 5)) {
+        isDragging = true;
+        // Tạo clone nổi lên để kéo
+        clone = tag.cloneNode(true);
+        clone.style.cssText = `position:fixed; opacity:0.85; pointer-events:none; z-index:9999;
+          width:${tag.offsetWidth}px; left:${tag.getBoundingClientRect().left}px;
+          top:${tag.getBoundingClientRect().top}px; box-shadow:0 4px 16px rgba(0,0,0,0.18);`;
+        document.body.appendChild(clone);
+        tag.style.opacity = '0.3';
+      }
+      if (!isDragging || !clone) return;
+      e.preventDefault();
+      clone.style.top = (touch.clientY - 20) + 'px';
+
+      // Tìm target để highlight
+      container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+      const targetTag = elemBelow?.closest('.member-tag[data-member-name]');
+      if (targetTag && targetTag !== tag) targetTag.classList.add('drag-over');
+    }, { passive: false });
+
+    handle.addEventListener('touchend', e => {
+      if (!isDragging) return;
+      if (clone) { clone.remove(); clone = null; }
+      tag.style.opacity = '';
+      isDragging = false;
+
+      const touch = e.changedTouches[0];
+      const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+      const targetTag = elemBelow?.closest('.member-tag[data-member-name]');
+      container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+      if (targetTag && targetTag !== tag) {
+        container.insertBefore(tag, targetTag);
+        saveMemberOrder(getNewOrder());
+      }
+    });
+  });
+}
+
 function render() {
   const app = document.getElementById('app');
 
@@ -1086,14 +1208,18 @@ function render() {
     </div>`;
 
     html += `<div class="card">
-      <div class="card-head"><span class="card-title">Thành viên</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">Bấm tên để sửa</span></div>
-      <div class="row" style="margin-bottom:12px;">`;
+      <div class="card-head"><span class="card-title">Thành viên</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">Bấm tên để sửa · Kéo ⠿ để sắp xếp</span></div>
+      <div class="member-sortable row" style="margin-bottom:12px; flex-wrap:wrap;">`;
     if (trip.members.length === 0) {
       html += `<span style="font-size:13px; color:var(--text-muted);">Chưa có thành viên nào.</span>`;
     }
     trip.members.forEach(m => {
       const hasExpenses = expenses.some(e => e.paidBy === m);
-      html += `<span class="member-tag"><span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span><button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button></span>`;
+      html += `<span class="member-tag" draggable="true" data-member-name="${escapeHtml(m)}">
+        <span class="drag-handle" title="Kéo để sắp xếp">⠿</span>
+        <span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span>
+        <button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button>
+      </span>`;
     });
     html += `</div><div class="row">
       <input id="memberInput" placeholder="Tên thành viên" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
@@ -1255,6 +1381,9 @@ function render() {
     expenseFilter.category = e.target.value === '__all__' ? '' : e.target.value;
     render();
   });
+
+  // Drag-to-reorder thành viên
+  initMemberDragSort();
 
   const existingOverlay = document.getElementById('modalOverlay');
   if (existingOverlay) existingOverlay.remove();
