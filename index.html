@@ -357,7 +357,7 @@
   <div id="app"></div>
 </div>
 
-
+<script>
 // ══════════════════════════════════════════════════════════════
 // i18n — bilingual support (VI / EN)
 // ══════════════════════════════════════════════════════════════
@@ -373,8 +373,8 @@ const APP_TRANSLATIONS = {
   vi: {
     home_currency_label: 'Đơn vị tiền tệ nội địa',
     has_foreign_currency: 'Trip này có chi tiêu bằng ngoại tệ',
-    trip_rate_hint: '${t('trip_rate_hint')}',
-    trip_rate_hint2: '${t('trip_rate_hint2')}',
+    trip_rate_hint: 'Tỷ giá áp dụng chung cho cả trip, có thể sửa lại sau trong phần sửa tên trip.',
+    trip_rate_hint2: 'Đổi tỷ giá sẽ áp dụng lại cho mọi chi tiêu ngoại tệ đã ghi trong trip này.',
     new_trip_title: 'Tạo trip mới',
     new_trip_name_label: 'Tên trip',
     new_trip_name_placeholder: 'ví dụ Nhật Bản 2025',
@@ -385,8 +385,8 @@ const APP_TRANSLATIONS = {
     btn_add_expense: '+ Thêm chi tiêu',
     btn_add_member: 'Thêm',
     member_placeholder: 'Tên thành viên',
-    member_hint: '${t('member_hint')}',
-    no_expense: '${t('no_expense')}',
+    member_hint: 'Bấm tên để sửa · Kéo ⠿ để sắp xếp',
+    no_expense: 'Chưa có chi tiêu nào.',
     expense_filter_all_payer: 'Tất cả người trả',
     expense_filter_all_cat: 'Tất cả loại',
     expense_total: 'Tổng chi',
@@ -397,7 +397,7 @@ const APP_TRANSLATIONS = {
     will_receive: '(sẽ nhận lại)',
     needs_to_pay: '(cần trả thêm)',
     settled: '(đã hòa sổ)',
-    all_settled: t('all_settled'),
+    all_settled: 'Mọi người đã hòa sổ.',
     cat_other: 'Khác',
     cat_food: 'Ăn uống',
     cat_transport: 'Di chuyển',
@@ -417,7 +417,7 @@ const APP_TRANSLATIONS = {
     date_label: 'Ngày',
     time_label: 'Giờ',
     currency_label: 'Đơn vị tiền',
-    amount_label: t('amount_label'),
+    amount_label: 'Số tiền',
     desc_label: 'Mô tả (không bắt buộc)',
     cat_label: 'Loại chi tiêu',
     split_label: 'Chia cho (bỏ trống = cả nhóm)',
@@ -431,7 +431,7 @@ const APP_TRANSLATIONS = {
     old_name_label: 'Tên cũ',
     new_name_label: 'Tên mới',
     del_trip_title: 'Xóa trip',
-    del_trip_confirm: '${t('del_trip_confirm')}',
+    del_trip_confirm: 'Xóa trip và toàn bộ chi tiêu trong đó?',
     del_member_title: 'Xóa thành viên',
     del_member_confirm_prefix: 'Xóa thành viên',
     del_member_confirm_suffix: 'và mọi khoản chi tiêu có liên quan?',
@@ -587,7 +587,6 @@ function categoryLabelI18n(id) {
   const map = { '': 'cat_other', food: 'cat_food', transport: 'cat_transport', stay: 'cat_stay', activity: 'cat_activity', shopping: 'cat_shopping', fund: 'cat_fund', payment: 'cat_payment' };
   return t(map[id] || 'cat_other');
 }
-<script>
 /* ====== CẤU HÌNH - DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ====== */
 const API_URL = 'https://script.google.com/macros/s/AKfycby_YCMUQ0o9zzYbk1zttsYKsktK3tQk8ddxcXFiJfzdedxL_J-2wEnEb3wvXM36OupBHQ/exec';
 /* ============================================================= */
