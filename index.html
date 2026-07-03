@@ -282,17 +282,20 @@
   .lang-toggle-btn {
     font-size: 11px !important;
     font-weight: 700 !important;
-    letter-spacing: 0.05em;
-    padding: 0 8px;
-    min-width: 30px;
-    border: 1.5px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-2, var(--text-muted));
+    letter-spacing: 0.06em;
+    padding: 3px 8px !important;
+    height: 26px !important;
+    min-width: auto !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 20px !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    box-shadow: none !important;
+    line-height: 1 !important;
   }
   .lang-toggle-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: none;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
   }
 
 
@@ -365,7 +368,12 @@ let appLang = localStorage.getItem('ts_app_lang') || 'vi';
 function setLang(lang) {
   appLang = lang;
   localStorage.setItem('ts_app_lang', lang);
-  render();
+  // Nếu đang ở workspace setup screen, re-render nó thay vì render() chính
+  if (!WORKSPACE_ID) {
+    renderWorkspaceSetup(null);
+  } else {
+    render();
+  }
 }
 function toggleAppLang() { setLang(appLang === 'vi' ? 'en' : 'vi'); }
 
@@ -461,12 +469,15 @@ const APP_TRANSLATIONS = {
     rate_placeholder: 'ví dụ 165',
     foreign_currency_label: 'Đơn vị ngoại tệ',
     new_trip: '+ Trip mới',
-    no_trip: 'Chưa có trip nào. Tạo trip mới để bắt đầu!',
+    no_trip: 'Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.',
     share_for: 'chia',
     archived_label: '(lưu trữ)',
     pct_label: 'Tổng',
     help_q1: 'Cách dùng',
     settled_mark: 'đánh dấu hoàn thành',
+    custom_other: 'Khác (tự nhập)...',
+    custom_currency_label: 'Mã/ký hiệu tiền tệ',
+    members_section: 'THÀNH VIÊN',
     // confirm dialogs
     toast_need_name: 'Nhập mã/ký hiệu tiền tệ trước khi tạo trip',
     toast_need_name2: 'Nhập mã/ký hiệu tiền tệ trước khi lưu',
@@ -569,6 +580,9 @@ const APP_TRANSLATIONS = {
     pct_label: 'Total',
     help_q1: 'How to use',
     settled_mark: 'mark as paid',
+    custom_other: 'Other (enter manually)...',
+    custom_currency_label: 'Currency code/symbol',
+    members_section: 'MEMBERS',
     toast_need_name: 'Please enter a currency code before creating the trip',
     toast_need_name2: 'Please enter a currency code before saving',
     toast_cant_change_currency: 'This trip already has expenses in',
@@ -1501,7 +1515,7 @@ function render() {
   }
 
   if (!trip && allTrips.length === 0) {
-    html += `<p class="empty">Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.</p>`;
+    html += `<p class="empty">${t('no_trip')}</p>`;
   }
 
   if (trip) {
@@ -2077,22 +2091,28 @@ function renderModal() {
     overlay.innerHTML = `<div class="modal">
       <h2>${t('new_trip_title')}</h2>
       <div class="field">
-        <label>Tên trip</label>
-        <input id="newTripInput" placeholder="Ví dụ: Đà Lạt 2026" value="${escapeHtml(newTripName)}">
+        <label>${t('new_trip_name_label')}</label>
+        <input id="newTripInput" placeholder="${t('new_trip_name_placeholder')}" value="${escapeHtml(newTripName)}">
+      </div>
+      <div class="field">
+        <label>${t('home_currency_label')}</label>
+        <select id="newTripHomeCurrencySelect">
+          ${ALL_HOME_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripHomeCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+        </select>
       </div>
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" id="useForeignCheckbox" ${newTripUseForeign ? 'checked' : ''} style="width:auto; height:auto;">
-          Trip này có chi tiêu bằng ngoại tệ
+          ${t('has_foreign_currency')}
         </label>
       </div>
       ${newTripUseForeign ? `
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>Đơn vị ngoại tệ</label>
+          <label>${t('foreign_currency_label')}</label>
           <select id="newTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
-            <option value="__custom__" ${newTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
+            <option value="__custom__" ${newTripCurrency === '__custom__' ? 'selected' : ''}>${t('custom_other')}</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
@@ -2102,7 +2122,7 @@ function renderModal() {
       </div>
       ${newTripCurrency === '__custom__' ? `
       <div class="field">
-        <label>Mã/ký hiệu tiền tệ</label>
+        <label>${t('custom_currency_label')}</label>
         <input id="newTripCustomCurrencyInput" placeholder="${t('custom_currency_placeholder')}" value="${escapeHtml(newTripCustomCurrency)}">
       </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
@@ -2119,7 +2139,7 @@ function renderModal() {
     overlay.innerHTML = `<div class="modal">
       <h2>${t('rename_trip_title')}</h2>
       <div class="field">
-        <label>Tên trip</label>
+        <label>${t('new_trip_name_label')}</label>
         <input id="renameTripInput" value="${escapeHtml(renameTripDraft)}">
       </div>
       <div class="field">
@@ -2137,10 +2157,10 @@ function renderModal() {
       ${renameTripUseForeign ? `
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>Đơn vị ngoại tệ</label>
+          <label>${t('foreign_currency_label')}</label>
           <select id="renameTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === renameTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
-            <option value="__custom__" ${renameTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
+            <option value="__custom__" ${renameTripCurrency === '__custom__' ? 'selected' : ''}>${t('custom_other')}</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
@@ -2150,7 +2170,7 @@ function renderModal() {
       </div>
       ${renameTripCurrency === '__custom__' ? `
       <div class="field">
-        <label>Mã/ký hiệu tiền tệ</label>
+        <label>${t('custom_currency_label')}</label>
         <input id="renameTripCustomCurrencyInput" placeholder="${t('custom_currency_placeholder')}" value="${escapeHtml(renameTripCustomCurrency)}">
       </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
@@ -2735,28 +2755,31 @@ function startApp(workspaceId) {
 
 function renderWorkspaceSetup(existingWarning) {
   const app = document.getElementById('app');
+  const wsTitle = appLang === 'en' ? 'Your workspace' : 'Tạo không gian của bạn';
+  const wsDesc = appLang === 'en'
+    ? 'Choose a unique name to store your trips, separate from other users. Example: your name or a unique alias (e.g. <em>phong-2026</em>).'
+    : 'Đặt một tên riêng để lưu trữ trip của bạn, tách biệt với người khác cùng dùng app này. Ví dụ: tên bạn hoặc một biệt danh không trùng với ai (vd: <em>phong-2026</em>).';
+  const wsLabel = appLang === 'en' ? 'Workspace name' : 'Tên không gian';
+  const wsPlaceholder = appLang === 'en' ? 'e.g. phong-2026' : 'vd: phong-2026';
+  const wsContinue = appLang === 'en' ? 'Continue' : 'Tiếp tục';
   app.innerHTML = `
     <div class="card" style="max-width:420px; margin:2rem auto;">
-      <div class="card-head"><span class="card-title">Tạo không gian của bạn</span></div>
-      <p style="font-size:13.5px; color:var(--text-secondary); margin-top:0;">
-        Đặt một tên riêng để lưu trữ trip của bạn, tách biệt với người khác cùng dùng app này.
-        Ví dụ: tên bạn hoặc một biệt danh không trùng với ai (vd: <em>phong-2026</em>).
-      </p>
+      <div class="card-head"><span class="card-title">${wsTitle}</span></div>
+      <p style="font-size:13.5px; color:var(--text-secondary); margin-top:0;">${wsDesc}</p>
       <div class="field">
-        <label>Tên không gian</label>
-        <input id="workspaceInput" placeholder="vd: phong-2026" autocomplete="off">
+        <label>${wsLabel}</label>
+        <input id="workspaceInput" placeholder="${wsPlaceholder}" autocomplete="off">
       </div>
       <div id="workspaceWarning"></div>
       <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <button class="primary" onclick="window.app.confirmWorkspace()">Tiếp tục</button>
+        <button class="primary" onclick="window.app.confirmWorkspace()">${wsContinue}</button>
       </div>
     </div>
   `;
   if (existingWarning) {
     document.getElementById('workspaceWarning').innerHTML = `
       <div class="setup-banner" style="margin-bottom:0;">
-        Tên "<strong>${escapeHtml(existingWarning)}</strong>" đã có dữ liệu trip từ trước.
-        Nếu đây không phải không gian của bạn, hãy đổi sang tên khác để tránh nhầm lẫn với người khác.
+        ${appLang === 'en' ? `The name "<strong>${escapeHtml(existingWarning)}</strong>" already has trip data. If this is not your workspace, please choose a different name.` : `Tên "<strong>${escapeHtml(existingWarning)}</strong>" đã có dữ liệu trip từ trước. Nếu đây không phải không gian của bạn, hãy đổi sang tên khác.`}
       </div>`;
   }
   document.getElementById('workspaceInput').focus();
