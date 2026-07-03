@@ -422,9 +422,9 @@ const APP_TRANSLATIONS = {
     cat_label: 'Loại chi tiêu',
     split_label: 'Chia cho (bỏ trống = cả nhóm)',
     btn_save_expense: 'Lưu chi tiêu',
-    tip_balance: 'Mục "Tổng quan từng người" cho thấy số dư thực tế sau khi trừ phần ai đã dùng...',
-    tip_foreign: 'Khi tạo trip, tick "Có chi tiêu bằng ngoại tệ"...',
-    tip_cashfund: 'Dùng thành viên "Quỹ chung" để ghi khoản góp tiền mặt chung...',
+    tip_balance: "Muc Tong quan tung nguoi cho thay so du thuc te.",
+    tip_foreign: "Khi tao trip, tick Co chi tieu bang ngoai te.",
+    tip_cashfund: "Dung thanh vien Quy chung de ghi khoan gop tien mat chung.",
     // rename/edit member
     rename_trip_title: 'Sửa trip',
     edit_member_title: 'Sửa tên thành viên',
@@ -527,9 +527,9 @@ const APP_TRANSLATIONS = {
     cat_label: 'Category',
     split_label: 'Split with (empty = whole group)',
     btn_save_expense: 'Save expense',
-    tip_balance: 'The "Per-person overview" shows the real balance after each person\'s share is deducted...',
-    tip_foreign: 'When creating a trip, check "Has foreign currency expenses"...',
-    tip_cashfund: 'Use the "Shared fund" member to log cash pool contributions...',
+    tip_balance: "Check Per-person overview to see real balance after each share.",
+    tip_foreign: "When creating a trip, check Has foreign currency expenses.",
+    tip_cashfund: "Use the Shared fund member to log cash pool contributions.",
     rename_trip_title: 'Edit trip',
     edit_member_title: 'Rename member',
     old_name_label: 'Old name',
@@ -915,7 +915,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   y += 26;
   ctx.fillStyle = '#1A1A2E';
   ctx.font = '700 28px -apple-system, sans-serif';
-  ctx.fillText(fmtHome(grandTotal, trip.homeCurrency || \'VND\'), PAD, y);
+  ctx.fillText(fmtHome(grandTotal, trip.homeCurrency || 'VND'), PAD, y);
   y += 36;
 
   // --- Donut chart + legend ---
@@ -998,7 +998,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     ctx.fillText(fmtHome(usage[m] || 0, trip.homeCurrency), COL3, y);
     ctx.fillStyle = isPos ? '#1A9461' : isNeg ? '#D6453A' : '#9295B0';
     ctx.font = '600 14px -apple-system, sans-serif';
-    ctx.fillText((bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency || \'VND\'), COL4, y);
+    ctx.fillText((bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency || 'VND'), COL4, y);
     ctx.textAlign = 'left';
     y += 26;
   });
@@ -1014,7 +1014,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     ctx.fillText('QUỸ TIỀN MẶT CHUNG', PAD, y);
     y += 22;
     cashFundRemaining.forEach(r => {
-      const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, trip.homeCurrency || \'VND\');
+      const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, trip.homeCurrency || 'VND');
       ctx.fillStyle = '#1A1A2E';
       ctx.font = '500 14px -apple-system, sans-serif';
       ctx.fillText(`Còn lại (${r.label})`, PAD, y);
