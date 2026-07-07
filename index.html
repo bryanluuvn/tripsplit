@@ -305,6 +305,11 @@
   }
   .sync-dot.ok { background: var(--success); }
   .sync-dot.error { background: var(--danger); }
+  .sync-dot.offline { background: #F59E0B; animation: pulse-offline 2s infinite; }
+  @keyframes pulse-offline {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 
   .setup-banner {
     background: #FFF7E8; border: 1px solid #F0CB7C; border-radius: var(--radius);
@@ -575,6 +580,7 @@ const APP_TRANSLATIONS = {
     sync_ok_title: 'Đã đồng bộ',
     sync_error_title: 'Lỗi đồng bộ - kiểm tra mạng',
     syncing_title: 'Đang đồng bộ...',
+    offline_title: 'Đang offline - dữ liệu sẽ đồng bộ khi online',
     load_error_prefix: 'Không tải được dữ liệu:',
     retry_btn: 'Thử lại',
     api_not_configured: 'Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.',
@@ -796,6 +802,7 @@ const APP_TRANSLATIONS = {
     sync_ok_title: 'Synced',
     sync_error_title: 'Sync error - check connection',
     syncing_title: 'Syncing...',
+    offline_title: 'Offline - data will sync when back online',
     load_error_prefix: 'Could not load data:',
     retry_btn: 'Retry',
     api_not_configured: 'API_URL is not configured yet. Open index.html and paste your Google Apps Script Web App link into the API_URL variable near the top of the &lt;script&gt; section.',
@@ -1491,6 +1498,148 @@ async function apiPost(payload) {
   return json;
 }
 
+// ===== OFFLINE SUPPORT =====
+let pendingOps = [];
+const DB_NAME = 'TripSplitOfflineDB';
+const STORE_NAME = 'workspace_data';
+
+// Initialize IndexedDB
+async function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'wsId' });
+      }
+    };
+  });
+}
+
+// Save trips and expenses to IndexedDB
+async function saveOffline(trips, expenses) {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    await new Promise((resolve, reject) => {
+      const req = store.put({
+        wsId: WORKSPACE_ID,
+        trips,
+        expenses,
+        timestamp: Date.now()
+      });
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve();
+    });
+  } catch (err) {
+    console.warn('[Offline] Failed to save to IndexedDB:', err);
+  }
+}
+
+// Load trips and expenses from IndexedDB
+async function loadOffline() {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve, reject) => {
+      const req = store.get(WORKSPACE_ID);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const data = req.result;
+        resolve(data ? { trips: data.trips || [], expenses: data.expenses || [] } : { trips: [], expenses: [] });
+      };
+    });
+  } catch (err) {
+    console.warn('[Offline] Failed to load from IndexedDB:', err);
+    return { trips: [], expenses: [] };
+  }
+}
+
+// Modified apiGet with offline fallback
+const originalApiGet = apiGet;
+apiGet = async function() {
+  try {
+    const data = await originalApiGet();
+    // Save to offline storage for later use
+    await saveOffline(data.trips || [], data.expenses || []);
+    return data;
+  } catch (err) {
+    console.warn('[Offline] Network GET failed, loading from cache:', err);
+    // If network fails, load from offline storage
+    const offlineData = await loadOffline();
+    return { ok: true, ...offlineData };
+  }
+};
+
+// Modified apiPost with pending ops queue
+const originalApiPost = apiPost;
+apiPost = async function(payload) {
+  try {
+    const result = await originalApiPost(payload);
+    // Success: remove this op from pending queue if it was there
+    pendingOps = pendingOps.filter(op => JSON.stringify(op) !== JSON.stringify(payload));
+    return result;
+  } catch (err) {
+    console.warn('[Offline] POST failed, queueing operation:', payload);
+    // Network failed: queue the operation for later
+    if (!pendingOps.find(op => JSON.stringify(op) === JSON.stringify(payload))) {
+      pendingOps.push(payload);
+    }
+    // Return fake success to let UI update optimistically
+    return { ok: true };
+  }
+};
+
+// Sync pending operations when back online
+async function syncPendingOps() {
+  if (pendingOps.length === 0) return;
+  
+  console.log(`[Offline] Syncing ${pendingOps.length} pending operations...`);
+  const opsToSync = [...pendingOps];
+  
+  for (const op of opsToSync) {
+    try {
+      await originalApiPost(op);
+      pendingOps = pendingOps.filter(o => JSON.stringify(o) !== JSON.stringify(op));
+      console.log('[Offline] Synced:', op.action);
+    } catch (err) {
+      console.warn('[Offline] Failed to sync:', op.action, err);
+      // Keep op in queue to retry later
+      break;
+    }
+  }
+  
+  // After syncing, refresh data from server
+  if (pendingOps.length === 0) {
+    console.log('[Offline] All ops synced, refreshing data...');
+    await refreshData(false);
+    showToast(t('sync_done') || 'Sync complete');
+  }
+}
+
+// Online/Offline event listeners
+window.addEventListener('online', () => {
+  console.log('[Offline] Back online!');
+  setSyncDot('loading');
+  syncPendingOps();
+});
+
+window.addEventListener('offline', () => {
+  console.log('[Offline] Gone offline');
+  setSyncDot('offline');
+});
+
+// Register Service Worker for offline asset caching
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js').catch(err => {
+    console.warn('[Offline] Service Worker registration failed:', err);
+  });
+}
+
 // ---- State ----
 let rawTrips = [];     // raw rows từ Sheet Trips
 let rawExpenses = [];  // raw rows từ Sheet Expenses
@@ -1521,8 +1670,23 @@ let toastTimer = null;
 function setSyncDot(state) {
   const dot = document.getElementById('syncDot');
   if (!dot) return;
-  dot.className = 'sync-dot' + (state === 'ok' ? ' ok' : state === 'error' ? ' error' : '');
-  dot.title = state === 'ok' ? t('sync_ok_title') : state === 'error' ? t('sync_error_title') : t('syncing_title');
+  
+  let className = 'sync-dot';
+  let title = t('syncing_title');
+  
+  if (state === 'ok') {
+    className += ' ok';
+    title = t('sync_ok_title');
+  } else if (state === 'error') {
+    className += ' error';
+    title = t('sync_error_title');
+  } else if (state === 'offline') {
+    className += ' offline';
+    title = t('offline_title');
+  }
+  
+  dot.className = className;
+  dot.title = title;
 }
 
 function showToast(msg) {
