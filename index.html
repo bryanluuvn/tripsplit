@@ -279,6 +279,26 @@
   }
   .icon-btn:hover { color: var(--text-primary); background: var(--surface-2); }
 
+  .lang-toggle-btn {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em;
+    padding: 3px 8px !important;
+    height: 26px !important;
+    min-width: auto !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 20px !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    box-shadow: none !important;
+    line-height: 1 !important;
+  }
+  .lang-toggle-btn:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+  }
+
+
   .sync-dot {
     width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted);
     display: inline-block; flex-shrink: 0;
@@ -331,33 +351,548 @@
       <h1>Trip Split</h1>
     </div>
     <div class="row" style="gap:10px;">
-      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="Đồng bộ dữ liệu mới nhất" title="Đồng bộ dữ liệu mới nhất" style="font-size:15px;" id="refreshBtn">↻</button>
-      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" style="font-size:15px;">❓</button>
-      <span id="syncDot" class="sync-dot" title="Trạng thái đồng bộ"></span>
+      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="${t('sync_latest')}" title="${t('sync_latest')}" style="font-size:15px;" id="refreshBtn">↻</button>
+      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="${t('help_title')}" title="${t('help_title')}" style="font-size:15px;">❓</button>
+      <button class="icon-btn lang-toggle-btn" onclick="toggleAppLang()" id="langToggleBtn" title="Switch language / Đổi ngôn ngữ" style="font-size:12px; font-weight:700; min-width:32px; letter-spacing:0.02em;">EN</button>
+      <span id="syncDot" class="sync-dot" title="${t('sync_status_title')}"></span>
     </div>
   </div>
   <div id="app"></div>
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+// i18n — bilingual support (VI / EN)
+// ══════════════════════════════════════════════════════════════
+let appLang = localStorage.getItem('ts_app_lang') || 'vi';
+function setLang(lang) {
+  appLang = lang;
+  localStorage.setItem('ts_app_lang', lang);
+  // Nếu đang ở workspace setup screen, re-render nó thay vì render() chính
+  if (!WORKSPACE_ID) {
+    renderWorkspaceSetup(null);
+  } else {
+    render();
+  }
+}
+function toggleAppLang() { setLang(appLang === 'vi' ? 'en' : 'vi'); }
+
+const APP_TRANSLATIONS = {
+  vi: {
+    home_currency_label: 'Đơn vị tiền tệ nội địa',
+    has_foreign_currency: 'Trip này có chi tiêu bằng ngoại tệ',
+    trip_rate_hint: 'Tỷ giá áp dụng chung cho cả trip, có thể sửa lại sau trong phần sửa tên trip.',
+    trip_rate_hint2: 'Đổi tỷ giá sẽ áp dụng lại cho mọi chi tiêu ngoại tệ đã ghi trong trip này.',
+    new_trip_title: 'Tạo trip mới',
+    new_trip_name_label: 'Tên trip',
+    new_trip_name_placeholder: 'ví dụ Nhật Bản 2025',
+    btn_cancel: 'Hủy',
+    btn_create: 'Tạo',
+    btn_save: 'Lưu',
+    btn_delete: 'Xóa',
+    btn_add_expense: '+ Thêm chi tiêu',
+    btn_add_member: 'Thêm',
+    member_placeholder: 'Tên thành viên',
+    member_hint: 'Bấm tên để sửa · Kéo ⠿ để sắp xếp',
+    no_expense: 'Chưa có chi tiêu nào.',
+    expense_filter_all_payer: 'Tất cả người trả',
+    expense_filter_all_cat: 'Tất cả loại',
+    expense_total: 'Tổng chi',
+    col_paid: 'Đã chi',
+    col_used: 'Đã dùng',
+    col_balance: 'Số dư',
+    balance_note: 'Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.',
+    will_receive: '(sẽ nhận lại)',
+    needs_to_pay: '(cần trả thêm)',
+    settled: '(đã hòa sổ)',
+    all_settled: 'Mọi người đã hòa sổ.',
+    cat_other: 'Khác',
+    cat_food: 'Ăn uống',
+    cat_transport: 'Di chuyển',
+    cat_stay: 'Chỗ ở',
+    cat_activity: 'Vui chơi',
+    cat_shopping: 'Mua sắm',
+    cat_fund: 'Góp quỹ',
+    cat_payment: 'Thanh toán',
+    cash_fund_remaining: 'Quỹ tiền mặt chung còn lại',
+    settlement_title: 'Kết quả chia tiền',
+    overview_title: 'Tổng quan từng người',
+    chart_by_cat: 'Chi tiêu theo loại',
+    cash_fund_card: 'Quỹ tiền mặt chung',
+    chart_by_day: 'Chi tiêu theo ngày',
+    add_expense_title: 'Thêm chi tiêu',
+    edit_expense_title: 'Sửa chi tiêu',
+    paid_by_label: 'Ai trả',
+    date_label: 'Ngày',
+    time_label: 'Giờ',
+    currency_label: 'Đơn vị tiền',
+    amount_label: 'Số tiền',
+    desc_label: 'Mô tả (không bắt buộc)',
+    cat_label: 'Loại chi tiêu',
+    split_label: 'Chia cho (bỏ trống = cả nhóm)',
+    btn_save_expense: 'Lưu chi tiêu',
+    tip_balance: "Muc Tong quan tung nguoi cho thay so du thuc te.",
+    tip_foreign: "Khi tao trip, tick Co chi tieu bang ngoai te.",
+    tip_cashfund: "Dung thanh vien Quy chung de ghi khoan gop tien mat chung.",
+    // rename/edit member
+    rename_trip_title: 'Sửa trip',
+    edit_member_title: 'Sửa tên thành viên',
+    old_name_label: 'Tên cũ',
+    new_name_label: 'Tên mới',
+    del_trip_title: 'Xóa trip',
+    del_trip_confirm: 'Xóa trip và toàn bộ chi tiêu trong đó?',
+    del_member_title: 'Xóa thành viên',
+    del_member_confirm_prefix: 'Xóa thành viên',
+    del_member_confirm_suffix: 'và mọi khoản chi tiêu có liên quan?',
+    // export
+    export_summary_header: 'Tổng kết chia tiền',
+    export_overview_header: 'Tổng quan',
+    export_cashfund_header: 'Quỹ tiền mặt chung còn lại',
+    export_settlement_header: 'Kết quả thanh toán',
+    export_col_date: 'Ngày', export_col_time: 'Giờ', export_col_cat: 'Loại',
+    export_col_payer: 'Người trả', export_col_desc: 'Mô tả',
+    export_col_orig_amount: 'Số tiền gốc', export_col_orig_unit: 'Đơn vị',
+    export_col_home_amount: 'Số tiền (home)',
+    export_col_split: 'Chia cho',
+    export_col_paid: 'Đã chi (home)', export_col_used: 'Đã dùng (home)', export_col_bal: 'Số dư (home)',
+    export_member_share_prefix: 'Phần của',
+    export_no_split: 'Không chia (góp quỹ)',
+    export_split_all: 'Cả nhóm',
+    export_transfers_for: 'chuyển cho',
+    export_all_settled: 'Mọi người đã hòa sổ',
+    toast_csv_done: 'Đã tải file CSV',
+    toast_copy_done: 'Đã copy vào clipboard',
+    toast_settle_done: 'Đã đánh dấu thanh toán',
+    // misc
+    fund_member: 'Quỹ chung',
+    fund_remaining_label: 'Còn lại',
+    custom_currency_placeholder: 'ví dụ LAK, MYR, Kip...',
+    rate_placeholder: 'ví dụ 165',
+    foreign_currency_label: 'Đơn vị ngoại tệ',
+    new_trip: '+ Trip mới',
+    no_trip: 'Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.',
+    share_for: 'chia',
+    archived_label: '(lưu trữ)',
+    pct_label: 'Tổng',
+    help_q1: 'Cách dùng',
+    expense_section: 'CHI TIÊU',
+    members_section: 'THÀNH VIÊN',
+    filter_all_cat: 'Tất cả loại',
+    filter_total: 'Tổng (đã lọc)',
+    save_changes_btn: 'Lưu thay đổi',
+    expense_paid_for: 'trả cho',
+    expense_paid: 'đã trả',
+    split_all_group: 'chia cả nhóm',
+    total_spending: 'Tổng chi',
+    chart_total: 'TỔNG CHI TIÊU',
+    overview_paid: 'ĐÃ CHI',
+    overview_used: 'ĐÃ DÙNG',
+    overview_balance: 'SỐ DƯ',
+    overview_note: 'Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.',
+    overview_tap_hint: '👆 Bấm vào tên để xem chi tiết giao dịch của từng người',
+    settlement_copy: 'Copy để gửi',
+    btn_archive: 'Lưu trữ trip',
+    btn_unarchive: 'Bỏ lưu trữ',
+    btn_delete_trip: 'Xóa trip này',
+    confirm_delete_expense: 'Xóa chi tiêu này? Không thể hoàn tác.',
+    confirm_delete_trip: 'Xóa trip này? Không thể hoàn tác, dữ liệu sẽ mất với mọi người.',
+    confirm_delete_member_prefix: 'Xóa thành viên',
+    confirm_delete_member_suffix: 'và mọi khoản chi tiêu có liên quan?',
+    loading_text: 'Đang tải dữ liệu...',
+    amount_label_vnd: 'Số tiền',
+    amount_hint_k: '(nhập theo nghìn đồng, ví dụ 150 = 150k)',
+    amount_placeholder: 'ví dụ 150',
+    amount_placeholder_foreign: 'ví dụ 5000',
+    desc_placeholder: 'Ăn tối, taxi, khách sạn...',
+    save_expense_btn: 'Lưu chi tiêu',
+    split_with_everyone: 'Cả nhóm',
+    paid_group: 'chia cả nhóm',
+    sync_latest: 'Đồng bộ dữ liệu mới nhất',
+    help_title: 'Hướng dẫn sử dụng',
+    aria_close: 'Đóng',
+    help_got_it: 'Đã hiểu',
+    help_1_title: '1. Bắt đầu',
+    help_1_body: 'Lần đầu mở app, bạn đặt 1 tên riêng (không trùng người khác) để tách dữ liệu của bạn khỏi người khác cùng dùng app này. App tự nhớ tên đó cho các lần mở sau, không cần nhập lại.',
+    help_2_title: '2. Tạo trip và ghi chi tiêu',
+    help_2_body: 'Bấm "+ Trip mới" → đặt tên trip → thêm thành viên. Mỗi lần chi tiêu, bấm "+ Thêm chi tiêu", chọn ai trả, số tiền (nhập theo <strong>ngàn đồng</strong>, vd gõ 90 = 90.000đ), và chia cho ai (bỏ trống = chia đều cả nhóm).',
+    help_3_title: '3. Xem kết quả',
+    help_3_body: 'App tự tính "Số dư từng người" và "Kết quả chia tiền" — số giao dịch ít nhất để mọi người hòa sổ. Bấm 📋 để copy gửi nhóm, ⬇️ để tải CSV, 🖼️ để tải ảnh tổng kết đẹp.',
+    help_4_title: '4. Chi tiêu bằng ngoại tệ',
+    help_4_body: 'Khi tạo trip, tick "Có chi tiêu bằng ngoại tệ", chọn đơn vị và nhập tỷ giá quy đổi sang VNĐ. Khi ghi chi tiêu, chọn đúng đơn vị (VNĐ hoặc ngoại tệ) — app tự quy đổi và vẫn hiện rõ số tiền gốc để đối chiếu.',
+    help_5_title: '5. Quỹ tiền mặt chung',
+    help_5_body: 'Khi ai đó góp tiền vào quỹ chung của cả nhóm, chọn loại chi tiêu "Góp quỹ". Khi chi tiêu bằng tiền mặt từ quỹ, chọn "💰 Quỹ chung" ở mục "Ai trả". App tự tính số tiền mặt còn lại trong quỹ, tách riêng khỏi công nợ giữa mọi người.',
+    help_6_title: '6. Xem chi tiết từng thành viên',
+    help_6_body: 'Trong bảng "Tổng quan từng người", bấm vào <u>tên</u> bất kỳ thành viên nào để xem popup chi tiết — bao gồm số tiền đã chi/đã dùng/số dư, và danh sách đầy đủ các giao dịch mà người đó có phần, kèm đúng số tiền họ phải chịu trong từng giao dịch.',
+    help_7_title: '7. Khác',
+    help_7_body: 'Bấm tên thành viên trong card "Thành viên" để sửa tên · bấm ✏️ trên chi tiêu để sửa lại · "Lưu trữ trip" để ẩn trip cũ khỏi danh sách chính mà không mất dữ liệu · bộ lọc theo người/loại chi tiêu nằm ngay trên danh sách chi tiêu · bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác.',
+    archive_done: 'Đã lưu trữ trip',
+    unarchive_done: 'Đã bỏ lưu trữ',
+    sync_done: 'Đã đồng bộ dữ liệu mới nhất',
+    img_done: 'Đã tải ảnh tổng kết',
+    connect_error: 'Lỗi kết nối, thử lại sau: ',
+    workspace_invalid: 'Chỉ dùng chữ, số, dấu gạch ngang/gạch dưới, không dấu cách',
+    workspace_required: 'Nhập tên không gian trước khi tiếp tục',
+    payment_error: 'Khoản thanh toán phải chọn đúng 1 người nhận',
+    fill_required: 'Điền đủ thông tin trước khi lưu',
+    settled_btn: '✓ Đánh dấu đã thanh toán',
+    settled_mark: 'đánh dấu hoàn thành',
+    custom_other: 'Khác (tự nhập)...',
+    custom_currency_label: 'Mã/ký hiệu tiền tệ',
+    members_section: 'THÀNH VIÊN',
+    // confirm dialogs
+    toast_need_name: 'Nhập mã/ký hiệu tiền tệ trước khi tạo trip',
+    toast_need_name2: 'Nhập mã/ký hiệu tiền tệ trước khi lưu',
+    toast_cant_change_currency: 'Trip đã có chi tiêu bằng',
+    toast_cant_change_suffix: ', không thể đổi sang',
+    toast_need_member: 'Tên thành viên không được để trống',
+    toast_dup_member: 'Đã có thành viên tên này trong trip',
+    member_rename_label: 'Tên',
+    member_rename_note_prefix: 'Mọi chi tiêu trước đây của',
+    member_rename_note_suffix: 'sẽ tự cập nhật theo tên mới.',
+    amount_hint_vnd: '(đơn vị: ngàn đồng)',
+    amount_hint_unit_prefix: '(đơn vị:',
+    amount_placeholder_vnd: 'ví dụ 90 = 90.000đ',
+    export_csv_aria: 'Xuất CSV',
+    export_image_aria: 'Xuất ảnh tổng kết',
+    transactions_involved: 'Giao dịch có phần',
+    my_share_label: 'phần của tôi',
+    payer_badge: 'người trả',
+    paid_suffix: 'đã trả',
+    no_transactions_yet: 'Chưa có giao dịch nào.',
+    close_btn: 'Đóng',
+    view_member_detail_title: 'Xem chi tiết giao dịch của',
+    archived_suffix: '(đã lưu trữ)',
+    edit_trip_aria: 'Sửa trip',
+    edit_trip_title: 'Sửa tên / ngoại tệ',
+    no_members_yet: 'Chưa có thành viên nào.',
+    drag_reorder_title: 'Kéo để sắp xếp',
+    add_members_first: 'Thêm thành viên trước khi ghi chi tiêu.',
+    no_expense_filter_match: 'Không có chi tiêu khớp bộ lọc.',
+    edit_aria: 'Sửa',
+    delete_aria: 'Xóa',
+    archived_trips_hide: 'Ẩn trip đã lưu trữ',
+    archived_trips_show: 'Xem trip đã lưu trữ',
+    sync_ok_title: 'Đã đồng bộ',
+    sync_error_title: 'Lỗi đồng bộ - kiểm tra mạng',
+    syncing_title: 'Đang đồng bộ...',
+    load_error_prefix: 'Không tải được dữ liệu:',
+    retry_btn: 'Thử lại',
+    api_not_configured: 'Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.',
+    remaining_label: 'Còn lại',
+    csv_col_date: 'Ngày',
+    csv_col_time: 'Giờ',
+    csv_col_category: 'Loại',
+    csv_col_payer: 'Người trả',
+    csv_col_desc: 'Mô tả',
+    img_overview_title: 'TỔNG QUAN TỪNG NGƯỜI',
+    img_cash_fund_title: 'QUỸ TIỀN MẶT CHUNG',
+    img_settlement_title: 'KẾT QUẢ THANH TOÁN',
+    img_all_settled: 'Mọi người đã hòa sổ',
+    img_footer: 'Tạo bởi Trip Split',
+    cash_fund_payer_option: '💰 Quỹ chung (tiền mặt)',
+    auto_payment_desc_prefix: 'Thanh toán cho',
+    fund_contribution_note: 'Khoản góp quỹ chỉ cộng vào số dư của người góp, không chia cho ai.',
+    payment_recipient_label: 'Người nhận',
+    payment_recipient_hint: '(bắt buộc chọn đúng 1 người)',
+    payment_note: 'Khoản thanh toán loại trừ khỏi thống kê chi tiêu nhưng vẫn tính vào số dư.',
+    sync_status_title: 'Trạng thái đồng bộ',
+    all_settled_full: 'Mọi người đã hòa sổ, không cần chuyển tiền.',
+    mark_settled_title: 'Đánh dấu đã thanh toán — tự tạo khoản Thanh toán tương ứng',
+    sync_undo_error_prefix: 'Lỗi đồng bộ, đã hoàn tác:',
+    remove_member_confirm_prefix: 'đã có chi tiêu trong trip này. Xóa thành viên sẽ XÓA LUÔN mọi chi tiêu mà',
+    remove_member_confirm_suffix: 'đã trả. Tiếp tục?',
+    copy_paid_word: 'trả',
+    copy_for_word: 'cho',
+  },
+  en: {
+    home_currency_label: 'Home currency',
+    has_foreign_currency: 'This trip has foreign currency expenses',
+    trip_rate_hint: 'Exchange rate applies to the whole trip, can be updated later in trip settings.',
+    trip_rate_hint2: 'Updating the rate will recalculate all foreign currency expenses in this trip.',
+    new_trip_title: 'New trip',
+    new_trip_name_label: 'Trip name',
+    new_trip_name_placeholder: 'e.g. Japan 2025',
+    btn_cancel: 'Cancel',
+    btn_create: 'Create',
+    btn_save: 'Save',
+    btn_delete: 'Delete',
+    btn_add_expense: '+ Add expense',
+    btn_add_member: 'Add',
+    member_placeholder: 'Member name',
+    member_hint: 'Tap name to edit · Drag ⠿ to reorder',
+    no_expense: 'No expenses yet.',
+    expense_filter_all_payer: 'All payers',
+    expense_filter_all_cat: 'All categories',
+    expense_total: 'Total',
+    col_paid: 'Paid',
+    col_used: 'Used',
+    col_balance: 'Balance',
+    balance_note: 'Paid − Used = Balance. "Used" excludes fund contributions.',
+    will_receive: '(will receive)',
+    needs_to_pay: '(owes more)',
+    settled: '(settled)',
+    all_settled: 'Everyone is settled up.',
+    cat_other: 'Other',
+    cat_food: 'Food',
+    cat_transport: 'Transport',
+    cat_stay: 'Accommodation',
+    cat_activity: 'Activities',
+    cat_shopping: 'Shopping',
+    cat_fund: 'Fund contribution',
+    cat_payment: 'Settlement payment',
+    cash_fund_remaining: 'Remaining in shared cash fund',
+    settlement_title: 'Settlement',
+    overview_title: 'Per-person overview',
+    chart_by_cat: 'Spending by category',
+    cash_fund_card: 'Shared cash fund',
+    chart_by_day: 'Spending by day',
+    add_expense_title: 'Add expense',
+    edit_expense_title: 'Edit expense',
+    paid_by_label: 'Paid by',
+    date_label: 'Date',
+    time_label: 'Time',
+    currency_label: 'Currency',
+    amount_label: 'Amount',
+    desc_label: 'Description (optional)',
+    cat_label: 'Category',
+    split_label: 'Split with (empty = whole group)',
+    btn_save_expense: 'Save expense',
+    tip_balance: "Check Per-person overview to see real balance after each share.",
+    tip_foreign: "When creating a trip, check Has foreign currency expenses.",
+    tip_cashfund: "Use the Shared fund member to log cash pool contributions.",
+    rename_trip_title: 'Edit trip',
+    edit_member_title: 'Rename member',
+    old_name_label: 'Old name',
+    new_name_label: 'New name',
+    del_trip_title: 'Delete trip',
+    del_trip_confirm: 'Delete this trip and all its expenses?',
+    del_member_title: 'Remove member',
+    del_member_confirm_prefix: 'Remove member',
+    del_member_confirm_suffix: 'and all their related expenses?',
+    export_summary_header: 'Trip expense summary',
+    export_overview_header: 'Overview',
+    export_cashfund_header: 'Shared cash fund remaining',
+    export_settlement_header: 'Settlement',
+    export_col_date: 'Date', export_col_time: 'Time', export_col_cat: 'Category',
+    export_col_payer: 'Paid by', export_col_desc: 'Description',
+    export_col_orig_amount: 'Original amount', export_col_orig_unit: 'Currency',
+    export_col_home_amount: 'Amount (home)',
+    export_col_split: 'Split with',
+    export_col_paid: 'Paid (home)', export_col_used: 'Used (home)', export_col_bal: 'Balance (home)',
+    export_member_share_prefix: 'Share of',
+    export_no_split: 'No split (fund)',
+    export_split_all: 'Everyone',
+    export_transfers_for: 'pays',
+    export_all_settled: 'Everyone is settled up',
+    toast_csv_done: 'CSV downloaded',
+    toast_copy_done: 'Copied to clipboard',
+    toast_settle_done: 'Marked as paid',
+    fund_member: 'Shared fund',
+    fund_remaining_label: 'Remaining',
+    custom_currency_placeholder: 'e.g. LAK, MYR...',
+    rate_placeholder: 'e.g. 165',
+    foreign_currency_label: 'Foreign currency',
+    new_trip: '+ New trip',
+    no_trip: 'No trips yet. Create a new trip to get started!',
+    share_for: 'split',
+    archived_label: '(archived)',
+    pct_label: 'Total',
+    help_q1: 'How to use',
+    expense_section: 'EXPENSES',
+    members_section: 'MEMBERS',
+    filter_all_cat: 'All categories',
+    filter_total: 'Total (filtered)',
+    save_changes_btn: 'Save changes',
+    expense_paid_for: 'paid for',
+    expense_paid: 'paid',
+    split_all_group: 'split with everyone',
+    total_spending: 'Total',
+    chart_total: 'TOTAL SPENDING',
+    overview_paid: 'PAID',
+    overview_used: 'USED',
+    overview_balance: 'BALANCE',
+    overview_note: 'Paid − Used = Balance. \"Used\" excludes fund contributions.',
+    overview_tap_hint: '👆 Tap a name to see their detailed transactions',
+    settlement_copy: 'Copy to share',
+    btn_archive: 'Archive trip',
+    btn_unarchive: 'Unarchive',
+    btn_delete_trip: 'Delete trip',
+    confirm_delete_expense: 'Delete this expense? This cannot be undone.',
+    confirm_delete_trip: 'Delete this trip? All data will be lost for everyone.',
+    confirm_delete_member_prefix: 'Remove member',
+    confirm_delete_member_suffix: 'and all their related expenses?',
+    loading_text: 'Loading...',
+    amount_label_vnd: 'Amount',
+    amount_hint_k: '(enter in thousands, e.g. 150 = 150k)',
+    amount_placeholder: 'e.g. 150',
+    amount_placeholder_foreign: 'e.g. 5000',
+    desc_placeholder: 'Dinner, taxi, hotel...',
+    save_expense_btn: 'Save expense',
+    split_with_everyone: 'Everyone',
+    paid_group: 'split with everyone',
+    sync_latest: 'Sync latest data',
+    help_title: 'How to use',
+    aria_close: 'Close',
+    help_got_it: 'Got it',
+    help_1_title: '1. Getting started',
+    help_1_body: 'The first time you open the app, set a unique name (not used by anyone else) to separate your data from other people using this app. The app remembers this name for next time, so you won\'t need to enter it again.',
+    help_2_title: '2. Create a trip and log expenses',
+    help_2_body: 'Tap "+ New Trip" → name the trip → add members. For each expense, tap "+ Add Expense", choose who paid, the amount, and who to split with (leave blank to split evenly among everyone).',
+    help_3_title: '3. View results',
+    help_3_body: 'The app automatically calculates "Each person\'s balance" and the "Settlement plan" — the minimum number of transactions needed to settle up. Tap 📋 to copy and share with the group, ⬇️ to download a CSV, 🖼️ to download a nice summary image.',
+    help_4_title: '4. Foreign currency expenses',
+    help_4_body: 'When creating a trip, check "Has foreign currency expenses", choose the currency, and enter the exchange rate to your home currency. When logging an expense, pick the right currency — the app converts it automatically while still showing the original amount for reference.',
+    help_5_title: '5. Shared cash fund',
+    help_5_body: 'When someone contributes cash to the group\'s shared fund, choose the "Fund contribution" category. When paying from the fund in cash, choose "💰 Shared fund" as the payer. The app automatically tracks how much cash remains in the fund, kept separate from debts between members.',
+    help_6_title: '6. View member details',
+    help_6_body: 'In the "Overview per person" table, tap any member\'s <u>name</u> to see a detail popup — including amounts paid/used/balance, and the full list of transactions they\'re part of, with their exact share of each one.',
+    help_7_title: '7. Other',
+    help_7_body: 'Tap a member\'s name in the "Members" card to rename them · tap ✏️ on an expense to edit it · "Archive trip" hides an old trip from the main list without losing data · filters by person/category sit right above the expense list · tap ↻ in the header to sync the latest data from others.',
+    archive_done: 'Trip archived',
+    unarchive_done: 'Trip unarchived',
+    sync_done: 'Data synced',
+    img_done: 'Summary image downloaded',
+    connect_error: 'Connection error, please try again: ',
+    workspace_invalid: 'Only letters, numbers, hyphens and underscores, no spaces',
+    workspace_required: 'Please enter a workspace name',
+    payment_error: 'A settlement payment must have exactly 1 recipient',
+    fill_required: 'Please fill in all required fields',
+    settled_btn: '✓ Mark as paid',
+    settled_mark: 'mark as paid',
+    custom_other: 'Other (enter manually)...',
+    custom_currency_label: 'Currency code/symbol',
+    toast_need_name: 'Please enter a currency code before creating the trip',
+    toast_need_name2: 'Please enter a currency code before saving',
+    toast_cant_change_currency: 'This trip already has expenses in',
+    toast_cant_change_suffix: ', cannot change to',
+    toast_need_member: 'Member name cannot be empty',
+    toast_dup_member: 'A member with this name already exists',
+    member_rename_label: 'Name',
+    member_rename_note_prefix: 'All previous expenses paid by',
+    member_rename_note_suffix: 'will automatically update to the new name.',
+    amount_hint_vnd: '(unit: thousand VND)',
+    amount_hint_unit_prefix: '(unit:',
+    amount_placeholder_vnd: 'e.g. 90 = 90,000₫',
+    export_csv_aria: 'Export CSV',
+    export_image_aria: 'Export summary image',
+    transactions_involved: 'Transactions involved',
+    my_share_label: 'my share',
+    payer_badge: 'payer',
+    paid_suffix: 'paid',
+    no_transactions_yet: 'No transactions yet.',
+    close_btn: 'Close',
+    view_member_detail_title: 'View transaction details for',
+    archived_suffix: '(archived)',
+    edit_trip_aria: 'Edit trip',
+    edit_trip_title: 'Edit name / currency',
+    no_members_yet: 'No members yet.',
+    drag_reorder_title: 'Drag to reorder',
+    add_members_first: 'Add members before logging expenses.',
+    no_expense_filter_match: 'No expenses match the filter.',
+    edit_aria: 'Edit',
+    delete_aria: 'Delete',
+    archived_trips_hide: 'Hide archived trips',
+    archived_trips_show: 'Show archived trips',
+    sync_ok_title: 'Synced',
+    sync_error_title: 'Sync error - check connection',
+    syncing_title: 'Syncing...',
+    load_error_prefix: 'Could not load data:',
+    retry_btn: 'Retry',
+    api_not_configured: 'API_URL is not configured yet. Open index.html and paste your Google Apps Script Web App link into the API_URL variable near the top of the &lt;script&gt; section.',
+    remaining_label: 'Remaining',
+    csv_col_date: 'Date',
+    csv_col_time: 'Time',
+    csv_col_category: 'Category',
+    csv_col_payer: 'Payer',
+    csv_col_desc: 'Description',
+    img_overview_title: 'OVERVIEW PER PERSON',
+    img_cash_fund_title: 'SHARED CASH FUND',
+    img_settlement_title: 'SETTLEMENT RESULT',
+    img_all_settled: 'Everyone is settled up',
+    img_footer: 'Created with Trip Split',
+    cash_fund_payer_option: '💰 Shared fund (cash)',
+    auto_payment_desc_prefix: 'Payment to',
+    fund_contribution_note: 'A fund contribution only adds to the contributor\'s balance and is not split with anyone.',
+    payment_recipient_label: 'Recipient',
+    payment_recipient_hint: '(must select exactly 1 person)',
+    payment_note: 'A settlement payment is excluded from spending stats but still counts toward balances.',
+    sync_status_title: 'Sync status',
+    all_settled_full: 'Everyone is settled up, no transfers needed.',
+    mark_settled_title: 'Mark as paid — automatically creates a matching Payment expense',
+    sync_undo_error_prefix: 'Sync error, changes reverted:',
+    remove_member_confirm_prefix: 'already has expenses in this trip. Removing this member will DELETE ALL expenses paid by',
+    remove_member_confirm_suffix: '. Continue?',
+    copy_paid_word: 'paid',
+    copy_for_word: 'for',
+  }
+};
+
+function t(key) {
+  const lang = appLang || 'vi';
+  return (APP_TRANSLATIONS[lang] && APP_TRANSLATIONS[lang][key]) || (APP_TRANSLATIONS['vi'][key]) || key;
+}
+// Locale to use for number formatting, following current app language
+function numLocale() { return appLang === 'en' ? 'en-US' : 'vi-VN'; }
+// Ngưỡng "coi như đã hòa sổ" — chỉ để lọc rác làm tròn số thực (floating point) khi chia tiền,
+// KHÔNG được lớn tới mức che mất nợ thật dù nhỏ. Rác làm tròn thực tế cỡ 1e-10 trở xuống,
+// nên ngưỡng chỉ cần rất nhỏ: 1 đơn vị cho tiền không có số lẻ (VNĐ/JPY/KRW/IDR),
+// 0.01 (1 xu) cho tiền có số lẻ (USD/EUR...).
+function settleThreshold(homeCurrency) {
+  const noDecimal = ['JPY', 'KRW', 'IDR', 'VND'].includes(homeCurrency || 'VND');
+  return noDecimal ? 1 : 0.01;
+}
+// Làm tròn số tiền theo đơn vị nhỏ nhất có ý nghĩa của từng loại tiền:
+// số nguyên cho tiền không có số lẻ (VNĐ/JPY/KRW/IDR), 2 số thập phân (xu) cho tiền còn lại.
+// Dùng thay cho Math.round() thuần khi tính balance/settlement để không cắt mất phần xu lẻ.
+function roundCurrency(amt, homeCurrency) {
+  const noDecimal = ['JPY', 'KRW', 'IDR', 'VND'].includes(homeCurrency || 'VND');
+  return noDecimal ? Math.round(amt) : Math.round(amt * 100) / 100;
+}
+// Category label via i18n
+function categoryLabelI18n(id) {
+  const map = { '': 'cat_other', food: 'cat_food', transport: 'cat_transport', stay: 'cat_stay', activity: 'cat_activity', shopping: 'cat_shopping', fund: 'cat_fund', payment: 'cat_payment' };
+  return t(map[id] || 'cat_other');
+}
 /* ====== CẤU HÌNH - DÁN URL APPS SCRIPT CỦA BẠN VÀO ĐÂY ====== */
 const API_URL = 'https://script.google.com/macros/s/AKfycby_YCMUQ0o9zzYbk1zttsYKsktK3tQk8ddxcXFiJfzdedxL_J-2wEnEb3wvXM36OupBHQ/exec';
 /* ============================================================= */
+/* NOTE: AppsScript backend cần hỗ trợ home_currency field trong:
+   createTrip, setTripCurrency actions + Trips sheet column           */
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
-function fmt(n) {
-  const rounded = Math.round(n);
-  const k = rounded / 1000;
-  // Nếu chia hết cho 1000 thì hiện số nguyên + k, nếu không thì hiện 1 số lẻ
-  const kRounded = Math.round(k * 10) / 10;
-  const display = kRounded % 1 === 0 ? kRounded.toFixed(0) : kRounded.toFixed(1);
-  return display.replace('.', ',') + 'k';
+// Format amount in home currency
+// VND: hiện dạng "1.500k" | Others: symbol prefix + number
+function fmtHome(n, homeCurrency) {
+  const hc = homeCurrency || 'VND';
+  if (hc === 'VND') {
+    const rounded = Math.round(n);
+    const k = rounded / 1000;
+    const kRounded = Math.round(k * 10) / 10;
+    const display = kRounded % 1 === 0 ? kRounded.toFixed(0) : kRounded.toFixed(1);
+    return display.replace('.', ',') + 'k';
+  }
+  const sym = currencySymbol(hc);
+  const rounded = Math.round(Math.abs(n) * 100) / 100;
+  const isNeg = n < 0;
+  // JPY, KRW, IDR: no decimal
+  const noDecimal = ['JPY','KRW','IDR','VND'].includes(hc);
+  const display = noDecimal
+    ? Math.round(rounded).toLocaleString()
+    : rounded.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (isNeg ? '-' : '') + sym + display;
 }
-// Format số tiền theo đơn vị ngoại tệ gốc (không chia 1000 như VNĐ), kèm symbol.
+// Legacy alias — used when home currency is known from context
+function fmt(n) { return fmtHome(n, currentHomeCurrency()); }
+// Format foreign currency amount (original currency, not converted)
 function fmtForeign(n, currencyCode) {
-  const rounded = Math.round(n * 100) / 100; // giữ tối đa 2 số lẻ cho ngoại tệ
+  const rounded = Math.round(n * 100) / 100;
   const display = rounded.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
   return display + currencySymbol(currencyCode);
+}
+// Get home currency of current active trip
+function currentHomeCurrency() {
+  const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+  return (trip && trip.homeCurrency) || 'VND';
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -366,15 +901,25 @@ function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$', name: 'USD' },
-  { code: 'JPY', symbol: '¥', name: 'JPY' },
   { code: 'EUR', symbol: '€', name: 'EUR' },
-  { code: 'THB', symbol: '฿', name: 'THB' },
+  { code: 'JPY', symbol: '¥', name: 'JPY' },
   { code: 'KRW', symbol: '₩', name: 'KRW' },
+  { code: 'GBP', symbol: '£', name: 'GBP' },
+  { code: 'THB', symbol: '฿', name: 'THB' },
   { code: 'SGD', symbol: 'S$', name: 'SGD' },
+  { code: 'AUD', symbol: 'A$', name: 'AUD' },
   { code: 'CNY', symbol: '¥', name: 'CNY' },
   { code: 'TWD', symbol: 'NT$', name: 'TWD' },
-  { code: 'AUD', symbol: 'A$', name: 'AUD' },
-  { code: 'GBP', symbol: '£', name: 'GBP' },
+  { code: 'HKD', symbol: 'HK$', name: 'HKD' },
+  { code: 'MYR', symbol: 'RM', name: 'MYR' },
+  { code: 'IDR', symbol: 'Rp', name: 'IDR' },
+  { code: 'PHP', symbol: '₱', name: 'PHP' },
+  { code: 'INR', symbol: '₹', name: 'INR' },
+];
+// ALL_CURRENCIES = home currency options (includes VND)
+const ALL_HOME_CURRENCIES = [
+  { code: 'VND', symbol: 'đ', name: 'VND' },
+  ...CURRENCIES,
 ];
 function currencySymbol(code) {
   const found = CURRENCIES.find(c => c.code === code);
@@ -402,6 +947,8 @@ const CASH_FUND_NAME = 'Quỹ chung';
 const NON_SPENDING_CATEGORIES = new Set(['fund', 'payment']);
 function isNonSpending(category) { return NON_SPENDING_CATEGORIES.has(category); }
 function categoryLabel(id) {
+  // Use i18n if available
+  if (typeof categoryLabelI18n === 'function') return categoryLabelI18n(id);
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.label : 'Khác';
 }
@@ -472,11 +1019,11 @@ function renderCategoryChart(expenses) {
   const gradient = `conic-gradient(${gradientStops.join(', ')})`;
 
   let html = `<div class="card">
-    <div class="card-head"><span class="card-title">Chi tiêu theo loại</span></div>
+    <div class="card-head"><span class="card-title">${t('chart_by_cat')}</span></div>
     <div class="donut-wrap">
       <div style="width:96px; height:96px; border-radius:50%; background:${gradient}; flex-shrink:0; position:relative;">
         <div style="position:absolute; inset:14px; background:var(--surface); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:var(--text-secondary); text-align:center; line-height:1.3;">
-          ${fmt(grandTotal)}
+          ${fmtHome(grandTotal, currentHomeCurrency())}
         </div>
       </div>
       <div class="donut-legend">`;
@@ -494,7 +1041,7 @@ function renderCategoryChart(expenses) {
     html += `<div class="cat-chart-row">
       <span class="cat-chart-label">${escapeHtml(categoryLabel(r.cat))}</span>
       <span class="cat-chart-bar-track"><span class="cat-chart-bar-fill" style="width:${Math.max(r.pct * 100, 3)}%; background:${categoryColor(r.cat)};"></span></span>
-      <span class="cat-chart-amt">${fmt(r.amt)}</span>
+      <span class="cat-chart-amt">${fmtHome(r.amt, currentHomeCurrency())}</span>
       <span class="cat-chart-pct">${Math.round(r.pct * 100)}%</span>
     </div>`;
   });
@@ -513,7 +1060,7 @@ function renderDailyChart(expenses) {
   const TOTAL_H = CHART_H + LABEL_TOP_H + LABEL_BOTTOM_H;
 
   let html = `<div class="card">
-    <div class="card-head"><span class="card-title">Chi tiêu theo ngày</span></div>
+    <div class="card-head"><span class="card-title">${t('chart_by_day')}</span></div>
     <div style="display:flex; align-items:flex-end; gap:10px; min-height:${TOTAL_H}px; overflow-x:auto; padding-bottom:2px; padding-top:4px;">`;
 
   days.forEach(d => {
@@ -526,12 +1073,12 @@ function renderDailyChart(expenses) {
     let segmentsHtml = '';
     catEntries.forEach(e => {
       const segH = (e.amt / d.total) * barH;
-      segmentsHtml += `<div style="width:100%; height:${segH}px; background:${categoryColor(e.cat)};" title="${escapeHtml(categoryLabel(e.cat))}: ${fmt(e.amt)}"></div>`;
+      segmentsHtml += `<div style="width:100%; height:${segH}px; background:${categoryColor(e.cat)};" title="${escapeHtml(categoryLabel(e.cat))}: ${fmtHome(e.amt, currentHomeCurrency())}"></div>`;
     });
 
     const shortDate = d.date ? d.date.slice(5).replace('-', '/') : '?'; // "2026-06-29" -> "06/29"
     html += `<div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:42px;">
-      <div style="font-size:10.5px; font-weight:600; color:var(--text-primary); margin-bottom:3px; white-space:nowrap;">${fmt(d.total)}</div>
+      <div style="font-size:10.5px; font-weight:600; color:var(--text-primary); margin-bottom:3px; white-space:nowrap;">${fmtHome(d.total, currentHomeCurrency())}</div>
       <div style="display:flex; flex-direction:column-reverse; width:26px; height:${CHART_H}px; border-radius:4px 4px 0 0; overflow:hidden;">
         ${segmentsHtml}
       </div>
@@ -548,7 +1095,7 @@ function renderDailyChart(expenses) {
   CATEGORIES.filter(c => usedCats.has(c.id)).forEach(c => {
     html += `<div class="legend-item" style="font-size:11.5px;">
       <span class="legend-dot" style="background:${c.color};"></span>
-      <span class="legend-label" style="flex:none;">${escapeHtml(c.label)}</span>
+      <span class="legend-label" style="flex:none;">${escapeHtml(categoryLabel(c.id))}</span>
     </div>`;
   });
   html += `</div></div>`;
@@ -630,11 +1177,11 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   // --- Tổng chi ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '600 11px -apple-system, sans-serif';
-  ctx.fillText('TỔNG CHI TIÊU', PAD, y);
+  ctx.fillText(t('chart_total'), PAD, y);
   y += 26;
   ctx.fillStyle = '#1A1A2E';
   ctx.font = '700 28px -apple-system, sans-serif';
-  ctx.fillText(fmt(grandTotal), PAD, y);
+  ctx.fillText(fmtHome(grandTotal, trip.homeCurrency || 'VND'), PAD, y);
   y += 36;
 
   // --- Donut chart + legend ---
@@ -685,7 +1232,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   ctx.fillStyle = '#9295B0';
   ctx.font = '600 11px -apple-system, sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('TỔNG QUAN TỪNG NGƯỜI', PAD, y);
+  ctx.fillText(t('img_overview_title'), PAD, y);
   y += 20;
 
   // Header hàng cột
@@ -696,15 +1243,16 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   ctx.fillStyle = '#9295B0';
   ctx.font = '500 11px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('ĐÃ CHI', COL2, y);
-  ctx.fillText('ĐÃ DÙNG', COL3, y);
-  ctx.fillText('SỐ DƯ', COL4, y);
+  ctx.fillText(t('overview_paid'), COL2, y);
+  ctx.fillText(t('overview_used'), COL3, y);
+  ctx.fillText(t('overview_balance'), COL4, y);
   ctx.textAlign = 'left';
   y += 18;
 
   trip.members.forEach(m => {
-    const bal = Math.round(balances[m] || 0);
-    const isPos = bal > 100, isNeg = bal < -100;
+    const bal = roundCurrency(balances[m] || 0, trip.homeCurrency);
+    const TH = settleThreshold(trip.homeCurrency);
+    const isPos = bal > TH, isNeg = bal < -TH;
 
     ctx.fillStyle = '#1A1A2E';
     ctx.font = '500 14px -apple-system, sans-serif';
@@ -713,11 +1261,11 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     ctx.textAlign = 'right';
     ctx.font = '500 13px -apple-system, sans-serif';
     ctx.fillStyle = '#5F6275';
-    ctx.fillText(fmt(paid[m] || 0), COL2, y);
-    ctx.fillText(fmt(usage[m] || 0), COL3, y);
+    ctx.fillText(fmtHome(paid[m] || 0, trip.homeCurrency), COL2, y);
+    ctx.fillText(fmtHome(usage[m] || 0, trip.homeCurrency), COL3, y);
     ctx.fillStyle = isPos ? '#1A9461' : isNeg ? '#D6453A' : '#9295B0';
     ctx.font = '600 14px -apple-system, sans-serif';
-    ctx.fillText((bal > 0 ? '+' : '') + fmt(bal), COL4, y);
+    ctx.fillText((bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency || 'VND'), COL4, y);
     ctx.textAlign = 'left';
     y += 26;
   });
@@ -730,13 +1278,13 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   if (hasCashFund) {
     ctx.fillStyle = '#9295B0';
     ctx.font = '600 11px -apple-system, sans-serif';
-    ctx.fillText('QUỸ TIỀN MẶT CHUNG', PAD, y);
+    ctx.fillText(t('img_cash_fund_title'), PAD, y);
     y += 22;
     cashFundRemaining.forEach(r => {
-      const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+      const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, trip.homeCurrency || 'VND');
       ctx.fillStyle = '#1A1A2E';
       ctx.font = '500 14px -apple-system, sans-serif';
-      ctx.fillText(`Còn lại (${r.label})`, PAD, y);
+      ctx.fillText(`${t('remaining_label')} (${r.label})`, PAD, y);
       ctx.fillStyle = r.remaining >= 0 ? '#1A9461' : '#D6453A';
       ctx.font = '700 14px -apple-system, sans-serif';
       ctx.textAlign = 'right';
@@ -753,12 +1301,12 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   // --- Kết quả thanh toán ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '600 11px -apple-system, sans-serif';
-  ctx.fillText('KẾT QUẢ THANH TOÁN', PAD, y);
+  ctx.fillText(t('img_settlement_title'), PAD, y);
   y += 24;
   if (settlements.length === 0) {
     ctx.fillStyle = '#585B78';
     ctx.font = '500 14px -apple-system, sans-serif';
-    ctx.fillText('Mọi người đã hòa sổ', PAD, y);
+    ctx.fillText(t('img_all_settled'), PAD, y);
     y += 26;
   } else {
     settlements.forEach(s => {
@@ -774,7 +1322,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
       ctx.fillText(s.to, PAD + fromWidth + arrowWidth, y);
       ctx.font = '700 14px -apple-system, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(fmt(s.amount), W - PAD, y);
+      ctx.fillText(fmtHome(s.amount, currentHomeCurrency()), W - PAD, y);
       ctx.textAlign = 'left';
       y += 28;
     });
@@ -784,7 +1332,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   // --- Footer ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '400 11px -apple-system, sans-serif';
-  ctx.fillText('Tạo bởi Trip Split', PAD, y);
+  ctx.fillText(t('img_footer'), PAD, y);
 
   // --- Xuất PNG ---
   canvas.toBlob(blob => {
@@ -796,7 +1344,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Đã tải ảnh tổng kết');
+    showToast(t('img_done'));
   }, 'image/png');
 }
 
@@ -887,7 +1435,7 @@ function computeCashFundRemaining(expenses) {
   const result = Object.entries(byCurrency)
     .map(([key, v]) => ({
       currency: key,
-      label: key || 'VNĐ',
+      label: key || currentHomeCurrency(),
       remaining: v.contributed - v.spent,
     }));
   // VNĐ lên đầu, còn lại theo alphabet
@@ -899,12 +1447,14 @@ function computeCashFundRemaining(expenses) {
   return result;
 }
 
-function simplifyDebts(balances) {
+function simplifyDebts(balances, homeCurrency) {
+  const TH = settleThreshold(homeCurrency);
+  const round = amt => roundCurrency(amt, homeCurrency);
   const creditors = [], debtors = [];
   Object.entries(balances).forEach(([name, amt]) => {
-    const r = Math.round(amt);
-    if (r > 100) creditors.push({ name, amt: r });
-    else if (r < -100) debtors.push({ name, amt: -r });
+    const r = round(amt);
+    if (r > TH) creditors.push({ name, amt: r });
+    else if (r < -TH) debtors.push({ name, amt: -r });
   });
   creditors.sort((a,b) => b.amt - a.amt);
   debtors.sort((a,b) => b.amt - a.amt);
@@ -912,11 +1462,11 @@ function simplifyDebts(balances) {
   let ci = 0, di = 0;
   while (ci < creditors.length && di < debtors.length) {
     const c = creditors[ci], d = debtors[di];
-    const amt = Math.min(c.amt, d.amt);
-    if (amt > 100) settlements.push({ from: d.name, to: c.name, amount: amt });
-    c.amt -= amt; d.amt -= amt;
-    if (c.amt <= 100) ci++;
-    if (d.amt <= 100) di++;
+    const amt = round(Math.min(c.amt, d.amt));
+    if (amt > TH) settlements.push({ from: d.name, to: c.name, amount: amt });
+    c.amt = round(c.amt - amt); d.amt = round(d.amt - amt);
+    if (c.amt <= TH) ci++;
+    if (d.amt <= TH) di++;
   }
   return settlements;
 }
@@ -956,6 +1506,8 @@ let newTripRate = '';
 let renameTripDraft = '';
 let renameTripUseForeign = false;
 let renameTripCurrency = 'USD';
+let newTripHomeCurrency = 'VND';
+let renameTripHomeCurrency = 'VND';
 let renameTripRate = '';
 let renameTripCustomCurrency = '';
 let editMemberDraft = { oldName: '', newName: '' };
@@ -970,7 +1522,7 @@ function setSyncDot(state) {
   const dot = document.getElementById('syncDot');
   if (!dot) return;
   dot.className = 'sync-dot' + (state === 'ok' ? ' ok' : state === 'error' ? ' error' : '');
-  dot.title = state === 'ok' ? 'Đã đồng bộ' : state === 'error' ? 'Lỗi đồng bộ - kiểm tra mạng' : 'Đang đồng bộ...';
+  dot.title = state === 'ok' ? t('sync_ok_title') : state === 'error' ? t('sync_error_title') : t('syncing_title');
 }
 
 function showToast(msg) {
@@ -991,6 +1543,7 @@ function getTripObjects() {
     archived: t.archived === 'true' || t.archived === true,
     foreignCurrency: t.foreign_currency || '',
     exchangeRate: t.exchange_rate || '',
+    homeCurrency: t.home_currency || 'VND',
   }));
 }
 function getExpensesForTrip(trip) {
@@ -999,13 +1552,17 @@ function getExpensesForTrip(trip) {
     .map(e => {
       const currency = e.currency || '';
       const amount = Number(e.amount);
+      const hc = trip.homeCurrency || 'VND';
+      // rate: how many home-currency units = 1 foreign unit
       const rate = currency ? (parseFloat(trip.exchangeRate) || 0) : 1;
+      const amountHome = currency ? amount * rate : amount;
       return {
         id: e.expense_id,
         paidBy: e.paid_by,
         amount,
         currency,
-        amountVND: currency ? amount * rate : amount,
+        amountHome,          // in home currency
+        amountVND: amountHome, // legacy alias
         desc: e.desc,
         splitWith: parseMembers(e.split_with),
         date: e.date,
@@ -1162,21 +1719,24 @@ function initMemberDragSort() {
 
 function render() {
   const app = document.getElementById('app');
+  // Update lang toggle button
+  const langBtn = document.getElementById('langToggleBtn');
+  if (langBtn) { langBtn.textContent = appLang === 'vi' ? 'EN' : 'VI'; langBtn.title = appLang === 'vi' ? 'Switch to English' : 'Chuyển sang tiếng Việt'; }
 
   if (!API_URL || API_URL === 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
     app.innerHTML = `<div class="setup-banner">
-      Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.
+      ${t('api_not_configured')}
     </div>`;
     return;
   }
 
   if (isLoading) {
-    app.innerHTML = `<p class="empty"><span class="spinner"></span> Đang tải dữ liệu...</p>`;
+    app.innerHTML = `<p class="empty"><span class="spinner"></span> ${t('loading_text')}</p>`;
     return;
   }
 
   if (loadError) {
-    app.innerHTML = `<div class="setup-banner">Không tải được dữ liệu: ${escapeHtml(loadError)}. <button onclick="window.app.retry()">Thử lại</button></div>`;
+    app.innerHTML = `<div class="setup-banner">${t('load_error_prefix')} ${escapeHtml(loadError)}. <button onclick="window.app.retry()">${t('retry_btn')}</button></div>`;
     return;
   }
 
@@ -1189,19 +1749,19 @@ function render() {
   activeTrips.forEach(t => {
     html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
   });
-  html += `<div class="tab add-tab" data-action="openNewTrip">+ Trip mới</div></div>`;
+  html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div></div>`;
 
   if (archivedTrips.length > 0) {
     html += `<div style="margin-bottom:1.1rem;">
       <span style="font-size:12.5px; color:var(--text-muted); cursor:pointer; text-decoration:underline;" data-action="toggleArchivedList">
-        ${showArchivedList ? 'Ẩn' : 'Xem'} trip đã lưu trữ (${archivedTrips.length})
+        ${showArchivedList ? t('archived_trips_hide') : t('archived_trips_show')} (${archivedTrips.length})
       </span>`;
     if (showArchivedList) {
       html += `<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">`;
-      archivedTrips.forEach(t => {
+      archivedTrips.forEach(atr => {
         html += `<div class="row" style="justify-content:space-between; background:var(--surface-2); border-radius:var(--radius-sm); padding:8px 12px;">
-          <span style="font-size:13.5px; cursor:pointer;" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</span>
-          <button class="icon-btn" data-action="unarchiveTrip" data-id="${t.trip_id}" aria-label="Bỏ lưu trữ" title="Bỏ lưu trữ">↩️</button>
+          <span style="font-size:13.5px; cursor:pointer;" data-action="selectTrip" data-id="${atr.trip_id}">${escapeHtml(atr.name)}</span>
+          <button class="icon-btn" data-action="unarchiveTrip" data-id="${atr.trip_id}" aria-label="${t('btn_unarchive')}" title="${t('btn_unarchive')}">↩️</button>
         </div>`;
       });
       html += `</div>`;
@@ -1210,7 +1770,7 @@ function render() {
   }
 
   if (!trip && allTrips.length === 0) {
-    html += `<p class="empty">Chưa có trip nào. Bấm "+ Trip mới" để bắt đầu.</p>`;
+    html += `<p class="empty">${t('no_trip')}</p>`;
   }
 
   if (trip) {
@@ -1218,47 +1778,47 @@ function render() {
 
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
       <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}${trip.archived ? ' <span style="font-size:11px; color:var(--text-muted); font-weight:500;">(đã lưu trữ)</span>' : ''}</h2>
-      <button class="icon-btn" data-action="openRenameTrip" aria-label="Sửa trip" title="Sửa tên / ngoại tệ">✏️</button>
+      <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
     </div>`;
 
     html += `<div class="card">
-      <div class="card-head"><span class="card-title">Thành viên</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">Bấm tên để sửa · Kéo ⠿ để sắp xếp</span></div>
+      <div class="card-head"><span class="card-title">${appLang === 'en' ? 'Members' : 'Thành viên'}</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">${t('member_hint')}</span></div>
       <div class="member-sortable row" style="margin-bottom:12px; flex-wrap:wrap;">`;
     if (trip.members.length === 0) {
-      html += `<span style="font-size:13px; color:var(--text-muted);">Chưa có thành viên nào.</span>`;
+      html += `<span style="font-size:13px; color:var(--text-muted);">${t('no_members_yet')}</span>`;
     }
     trip.members.forEach(m => {
       const hasExpenses = expenses.some(e => e.paidBy === m);
       html += `<span class="member-tag" draggable="true" data-member-name="${escapeHtml(m)}">
-        <span class="drag-handle" title="Kéo để sắp xếp">⠿</span>
+        <span class="drag-handle" title="${t('drag_reorder_title')}">⠿</span>
         <span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span>
         <button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button>
       </span>`;
     });
     html += `</div><div class="row">
-      <input id="memberInput" placeholder="Tên thành viên" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
-      <button onclick="window.app.addMember()">Thêm</button>
+      <input id="memberInput" placeholder="${t('member_placeholder')}" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
+      <button onclick="window.app.addMember()">${t('btn_add_member')}</button>
     </div></div>`;
 
     html += `<div class="card">
       <div class="card-head">
-        <span class="card-title">Chi tiêu · ${expenses.length}</span>
-        <button class="primary" ${trip.members.length === 0 ? 'disabled' : ''} data-action="openAddExpense">+ Thêm chi tiêu</button>
+        <span class="card-title">${appLang === 'en' ? 'Expenses' : 'Chi tiêu'} · ${expenses.length}</span>
+        <button class="primary" ${trip.members.length === 0 ? 'disabled' : ''} data-action="openAddExpense">${t('btn_add_expense')}</button>
       </div>`;
 
     if (trip.members.length === 0) {
-      html += `<p class="empty">Thêm thành viên trước khi ghi chi tiêu.</p>`;
+      html += `<p class="empty">${t('add_members_first')}</p>`;
     } else if (expenses.length === 0) {
-      html += `<p class="empty">Chưa có chi tiêu nào.</p>`;
+      html += `<p class="empty">${t('no_expense')}</p>`;
     } else {
       html += `<div class="row" style="gap:8px; margin-bottom:12px;">
         <select id="filterPerson" style="flex:1; min-width:0; height:34px; font-size:13px;">
-          <option value="">Tất cả người trả</option>
+          <option value="">${t('expense_filter_all_payer')}</option>
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${expenseFilter.person === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
         </select>
         <select id="filterCategory" style="flex:1; min-width:0; height:34px; font-size:13px;">
-          <option value="__all__">Tất cả loại</option>
-          ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+          <option value="__all__">${t('filter_all_cat')}</option>
+          ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
         </select>
       </div>`;
 
@@ -1272,30 +1832,30 @@ function render() {
       });
 
       if (filtered.length === 0) {
-        html += `<p class="empty">Không có chi tiêu khớp bộ lọc.</p>`;
+        html += `<p class="empty">${t('no_expense_filter_match')}</p>`;
       } else {
         let filteredTotal = 0;
         filtered.forEach(e => {
-          filteredTotal += e.amountVND;
+          filteredTotal += e.amountHome;
           const isForeign = !!e.currency;
           html += `<div class="expense-row">
             <div class="expense-main">
-              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' trả cho ' + escapeHtml(e.desc) : ' đã trả'}
-              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? 'góp vào quỹ chung' : e.category === 'payment' ? 'thanh toán cho ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : 'chia ' + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : 'cả nhóm')}</div>
+              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' ' + t('expense_paid_for') + ' ' + escapeHtml(e.desc) : ' ' + t('expense_paid')}
+              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? (appLang==='en'?'contributed to fund':'góp vào quỹ chung') : e.category === 'payment' ? (appLang==='en'?'paid to ':'thanh toán cho ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : (appLang==='en'?'split with ':'chia ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : (appLang==='en'?'everyone':'cả nhóm'))}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
               <span class="amount">${isForeign
-                ? `${e.amount.toLocaleString('vi-VN')}${currencySymbol(e.currency)}<span style="display:block; font-size:11px; color:var(--text-muted); font-weight:400; text-align:right;">≈ ${fmt(e.amountVND)}</span>`
-                : fmt(e.amountVND)}</span>
+                ? `${e.amount.toLocaleString(numLocale())}${currencySymbol(e.currency)}<span style="display:block; font-size:11px; color:var(--text-muted); font-weight:400; text-align:right;">≈ ${fmtHome(e.amountHome, trip.homeCurrency)}</span>`
+                : fmtHome(e.amountHome, trip.homeCurrency)}</span>
               <div class="expense-actions">
-                <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="Sửa">✏️</button>
-                <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="Xóa">🗑</button>
+                <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="${t('edit_aria')}">✏️</button>
+                <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="${t('delete_aria')}">🗑</button>
               </div>
             </div>
           </div>`;
         });
         const isFiltered = expenseFilter.person || expenseFilter.category;
-        html += `<div class="total-line">${isFiltered ? 'Tổng (đã lọc)' : 'Tổng chi'} <strong style="color:var(--text-primary)">${fmt(filteredTotal)}</strong></div>`;
+        html += `<div class="total-line">${isFiltered ? t('filter_total') : t('total_spending')} <strong style="color:var(--text-primary)">${fmtHome(filteredTotal, trip.homeCurrency)}</strong></div>`;
       }
     }
     html += `</div>`;
@@ -1310,44 +1870,45 @@ function render() {
       const { peopleBalances } = splitCashFundBalance(rawBalances);
       const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
       const cashFundRemaining = computeCashFundRemaining(expenses);
-      const settlements = simplifyDebts(peopleBalances);
+      const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
 
       const usage = computeUsage(trip.members, expenses);
       const paid = computePaid(trip.members, expenses);
 
       html += `<div class="card">
-        <div class="card-head"><span class="card-title">Tổng quan từng người</span></div>
+        <div class="card-head"><span class="card-title">${t('overview_title')}</span></div>
         <div class="overview-head-row">
           <span></span>
-          <span class="overview-head-label">Đã chi</span>
-          <span class="overview-head-label">Đã dùng</span>
-          <span class="overview-head-label">Số dư</span>
+          <span class="overview-head-label">${t('col_paid')}</span>
+          <span class="overview-head-label">${t('col_used')}</span>
+          <span class="overview-head-label">${t('col_balance')}</span>
         </div>`;
       trip.members.forEach(m => {
-        const bal = Math.round(peopleBalances[m] || 0);
-        const cls = bal > 100 ? 'balance-pos' : bal < -100 ? 'balance-neg' : '';
+        const bal = roundCurrency(peopleBalances[m] || 0, trip.homeCurrency);
+        const TH = settleThreshold(trip.homeCurrency);
+        const cls = bal > TH ? 'balance-pos' : bal < -TH ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
-        const note = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
+        const note = bal > TH ? t('will_receive').replace(/[()]/g,'') : bal < -TH ? t('needs_to_pay').replace(/[()]/g,'') : t('settled').replace(/[()]/g,'');
         html += `<div class="overview-row">
-          <span class="balance-name" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" data-action="openMemberDetail" data-member="${escapeHtml(m)}" title="Xem chi tiết giao dịch của ${escapeHtml(m)}">${escapeHtml(m)}</span>
-          <span class="overview-val">${fmt(paid[m] || 0)}</span>
-          <span class="overview-val">${fmt(usage[m] || 0)}</span>
-          <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmt(bal)}</span>
+          <span class="balance-name" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" data-action="openMemberDetail" data-member="${escapeHtml(m)}" title="${t('view_member_detail_title')} ${escapeHtml(m)}">${escapeHtml(m)}</span>
+          <span class="overview-val">${fmtHome(paid[m] || 0, trip.homeCurrency)}</span>
+          <span class="overview-val">${fmtHome(usage[m] || 0, trip.homeCurrency)}</span>
+          <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmtHome(bal, trip.homeCurrency)}</span>
         </div>
         <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:-4px; margin-bottom:4px;">${note}</div>`;
       });
-      html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:6px; padding-top:8px; border-top:1px solid var(--border);">Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.</div>`;
-      html += `<div style="font-size:11.5px; color:var(--accent-text); margin-top:5px;">👆 Bấm vào tên để xem chi tiết giao dịch của từng người</div>`;
+      html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:6px; padding-top:8px; border-top:1px solid var(--border);">${t('overview_note')}</div>`;
+      html += `<div style="font-size:11.5px; color:var(--accent-text); margin-top:5px;">${t('overview_tap_hint')}</div>`;
       html += `</div>`;
 
       if (hasCashFund) {
         html += `<div class="card">
-          <div class="card-head"><span class="card-title">💰 Quỹ tiền mặt chung</span></div>`;
+          <div class="card-head"><span class="card-title">💰 ${t('cash_fund_card')}</span></div>`;
         cashFundRemaining.forEach(r => {
           const cls = r.remaining >= 0 ? 'balance-pos' : 'balance-neg';
-          const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+          const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, trip.homeCurrency);
           html += `<div class="balance-row">
-            <span class="balance-name">Còn lại (${escapeHtml(r.label)})</span>
+            <span class="balance-name">${t('remaining_label')} (${escapeHtml(r.label)})</span>
             <span class="balance-amt ${cls}">${display}</span>
           </div>`;
         });
@@ -1356,15 +1917,15 @@ function render() {
 
       html += `<div class="card">
         <div class="card-head">
-          <span class="card-title">Kết quả chia tiền</span>
+          <span class="card-title">${t('settlement_title')}</span>
           <div class="row" style="gap:6px;">
-            <button class="icon-btn" data-action="exportCsv" aria-label="Xuất CSV" title="Xuất CSV">⬇️</button>
-            <button class="icon-btn" data-action="exportImage" aria-label="Xuất ảnh tổng kết" title="Xuất ảnh tổng kết">🖼️</button>
-            <button data-action="copySummary">📋 Copy để gửi</button>
+            <button class="icon-btn" data-action="exportCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
+            <button class="icon-btn" data-action="exportImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+            <button data-action="copySummary">📋 ${t('settlement_copy')}</button>
           </div>
         </div>`;
       if (settlements.length === 0) {
-        html += `<p class="empty">Mọi người đã hòa sổ, không cần chuyển tiền.</p>`;
+        html += `<p class="empty">${t('all_settled_full')}</p>`;
       } else {
         settlements.forEach(s => {
           html += `<div class="settlement-row">
@@ -1372,10 +1933,10 @@ function render() {
             <span class="settlement-arrow">→</span>
             <strong>${escapeHtml(s.to)}</strong>
             <span class="spacer"></span>
-            <strong>${fmt(s.amount)}</strong>
+            <strong>${fmtHome(s.amount, currentHomeCurrency())}</strong>
             <button class="settle-btn" data-action="markSettled"
-              data-from="${escapeHtml(s.from)}" data-to="${escapeHtml(s.to)}" data-amount="${Math.round(s.amount)}"
-              title="Đánh dấu đã thanh toán — tự tạo khoản Thanh toán tương ứng">✓</button>
+              data-from="${escapeHtml(s.from)}" data-to="${escapeHtml(s.to)}" data-amount="${s.amount}"
+              title="${t('mark_settled_title')}">✓</button>
           </div>`;
         });
       }
@@ -1383,10 +1944,10 @@ function render() {
     }
 
     html += `<div class="row" style="justify-content:space-between; margin-top:4px;">
-      <button class="danger-link" data-action="deleteTrip">Xóa trip này</button>
+      <button class="danger-link" data-action="deleteTrip">${t('btn_delete_trip')}</button>
       ${trip.archived
-        ? `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="unarchiveTrip" data-id="${trip.trip_id}">Bỏ lưu trữ</button>`
-        : `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="archiveTrip" data-id="${trip.trip_id}">Lưu trữ trip</button>`
+        ? `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="unarchiveTrip" data-id="${trip.trip_id}">${t('btn_unarchive')}</button>`
+        : `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="archiveTrip" data-id="${trip.trip_id}">${t('btn_archive')}</button>`
       }
     </div>`;
   }
@@ -1438,7 +1999,7 @@ async function processQueue() {
       rawExpenses = snapshotExpenses;
       // Xóa sạch queue còn lại vì state đã bị hoàn tác, các request sau không còn hợp lệ
       requestQueue.length = 0;
-      showToast('Lỗi đồng bộ, đã hoàn tác: ' + err.message);
+      showToast(t('sync_undo_error_prefix') + ' ' + err.message);
       setSyncDot('error');
       render();
       break;
@@ -1475,7 +2036,7 @@ function handleAction(e) {
   if (action === 'markSettled') {
     const from = e.currentTarget.dataset.from;
     const to = e.currentTarget.dataset.to;
-    const amount = parseInt(e.currentTarget.dataset.amount, 10);
+    const amount = parseFloat(e.currentTarget.dataset.amount);
     const now = new Date();
     const expenseData = {
       expense_id: uid(),
@@ -1483,7 +2044,7 @@ function handleAction(e) {
       paid_by: from,
       amount,
       currency: '',
-      desc: `Thanh toán cho ${to}`,
+      desc: `${t('auto_payment_desc_prefix')} ${to}`,
       split_with: to,
       date: now.toISOString().slice(0, 10),
       time: nowTimeStr(),
@@ -1493,7 +2054,7 @@ function handleAction(e) {
       () => rawExpenses.push({ ...expenseData }),
       () => apiPost({ action: 'addExpense', ...expenseData })
     );
-    showToast(`Đã ghi nhận: ${from} → ${to} ${fmt(amount)}`);
+    showToast(`${from} → ${to}: ${fmtHome(amount, currentHomeCurrency())}`);
     return;
   }
   if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
@@ -1503,6 +2064,7 @@ function handleAction(e) {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
     renameTripUseForeign = !!trip.foreign_currency;
+    renameTripHomeCurrency = trip.home_currency || 'VND';
     const isKnownCurrency = CURRENCIES.some(c => c.code === trip.foreign_currency);
     if (trip.foreign_currency && !isKnownCurrency) {
       renameTripCurrency = '__custom__';
@@ -1525,7 +2087,7 @@ function handleAction(e) {
       () => { trip.archived = 'true'; },
       () => apiPost({ action: 'setTripArchived', trip_id: id, archived: true })
     );
-    showToast('Đã lưu trữ trip');
+    showToast(t('archive_done'));
   }
 
   if (action === 'unarchiveTrip') {
@@ -1534,7 +2096,7 @@ function handleAction(e) {
       () => { trip.archived = ''; },
       () => apiPost({ action: 'setTripArchived', trip_id: id, archived: false })
     );
-    showToast('Đã bỏ lưu trữ');
+    showToast(t('unarchive_done'));
   }
 
   if (action === 'openEditMember') {
@@ -1545,7 +2107,7 @@ function handleAction(e) {
   if (action === 'removeMember') {
     const hasExpenses = e.currentTarget.dataset.hasExpenses === 'true';
     if (hasExpenses) {
-      const ok = confirm(`${name} đã có chi tiêu trong trip này. Xóa thành viên sẽ XÓA LUÔN mọi chi tiêu mà ${name} đã trả. Tiếp tục?`);
+      const ok = confirm(`${name} ${t('remove_member_confirm_prefix')} ${name} ${t('remove_member_confirm_suffix')}`);
       if (!ok) return;
     }
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
@@ -1584,6 +2146,7 @@ function handleAction(e) {
   }
 
   if (action === 'editExpense') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const exp = rawExpenses.find(ex => ex.expense_id === id);
     const currency = exp.currency || '';
     const amountNum = Number(exp.amount);
@@ -1592,7 +2155,7 @@ function handleAction(e) {
       paidBy: exp.paid_by,
       amount: String(exp.amount),
       currency,
-      amountInputRaw: currency ? String(amountNum) : String(amountNum / 1000),
+      amountInputRaw: currency ? String(amountNum) : (trip.homeCurrency === 'VND' ? String(amountNum / 1000) : String(amountNum)),
       desc: exp.desc,
       splitWith: parseMembers(exp.split_with),
       date: exp.date,
@@ -1603,7 +2166,7 @@ function handleAction(e) {
   }
 
   if (action === 'deleteExpense') {
-    if (!confirm('Xóa chi tiêu này? Không thể hoàn tác.')) return;
+    if (!confirm(t('confirm_delete_expense'))) return;
     withSaving(
       () => { rawExpenses = rawExpenses.filter(e => e.expense_id !== id); },
       () => apiPost({ action: 'deleteExpense', expense_id: id })
@@ -1611,7 +2174,7 @@ function handleAction(e) {
   }
 
   if (action === 'deleteTrip') {
-    if (!confirm('Xóa trip này? Không thể hoàn tác, dữ liệu sẽ mất với mọi người.')) return;
+    if (!confirm(t('confirm_delete_trip'))) return;
     const tripIdToDelete = activeTripId;
     withSaving(
       () => {
@@ -1630,7 +2193,7 @@ function handleAction(e) {
     const { peopleBalances } = splitCashFundBalance(rawBalances);
     const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
-    const settlements = simplifyDebts(peopleBalances);
+    const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     generateSummaryImage(trip, expenses, peopleBalances, settlements, hasCashFund ? cashFundRemaining : null);
   }
 
@@ -1641,7 +2204,7 @@ function handleAction(e) {
     const { peopleBalances } = splitCashFundBalance(rawBalances);
     const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
-    const settlements = simplifyDebts(peopleBalances);
+    const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     const usage = computeUsage(trip.members, expenses);
     const paid = computePaid(trip.members, expenses);
 
@@ -1658,9 +2221,9 @@ function handleAction(e) {
     let rows = [];
     // ---- Raw data: header + cột động theo từng thành viên ----
     rows.push([
-      'Ngày', 'Giờ', 'Loại', 'Người trả', 'Mô tả',
-      'Số tiền gốc', 'Đơn vị', 'Số tiền (VNĐ)', 'Chia cho',
-      ...members.map(m => `Phần của ${m} (VNĐ)`),
+      t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
+      t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${trip.homeCurrency || 'VND'})`, t('export_col_split'),
+      ...members.map(m => `${t('export_member_share_prefix')} ${m} (${trip.homeCurrency || 'VND'})`),
     ]);
     expenses.slice().reverse().forEach(ex => {
       const isFund = ex.category === 'fund';
@@ -1669,44 +2232,44 @@ function handleAction(e) {
       // Mỗi thành viên: nếu có phần trong giao dịch này thì điền số tiền, không thì rỗng
       const memberShares = members.map(m => {
         if (isFund) return '';
-        return splitMembers.includes(m) ? Math.round(share) : '';
+        return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, trip.homeCurrency) : '';
       });
       rows.push([
         ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
-        ex.desc || '', ex.amount, ex.currency || 'VNĐ', Math.round(ex.amountVND),
-        isFund ? 'Không chia (góp quỹ)' : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : 'Cả nhóm'),
+        ex.desc || '', ex.amount, ex.currency || (trip.homeCurrency || 'VND'), roundCurrency(ex.amountVND, trip.homeCurrency),
+        isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
         ...memberShares,
       ]);
     });
 
     // ---- Tổng quan từng người: 4 cột ----
     rows.push([]);
-    rows.push(['Tổng quan từng người', 'Đã chi (VNĐ)', 'Đã dùng (VNĐ)', 'Số dư (VNĐ)']);
+    rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
     members.forEach(m => {
       rows.push([
         m,
-        Math.round(paid[m] || 0),
-        Math.round(usage[m] || 0),
-        Math.round(peopleBalances[m] || 0),
+        roundCurrency(paid[m] || 0, trip.homeCurrency),
+        roundCurrency(usage[m] || 0, trip.homeCurrency),
+        roundCurrency(peopleBalances[m] || 0, trip.homeCurrency),
       ]);
     });
 
     // ---- Quỹ tiền mặt chung ----
     if (hasCashFund) {
       rows.push([]);
-      rows.push(['Quỹ tiền mặt chung']);
+      rows.push([t('cash_fund_remaining')]);
       cashFundRemaining.forEach(r => {
-        rows.push([`Còn lại (${r.label})`, r.currency ? r.remaining : Math.round(r.remaining)]);
+        rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, trip.homeCurrency)]);
       });
     }
 
     // ---- Kết quả thanh toán ----
     rows.push([]);
-    rows.push(['Kết quả thanh toán']);
+    rows.push([t('settlement_title')]);
     if (settlements.length === 0) {
-      rows.push(['Mọi người đã hòa sổ']);
+      rows.push([t('all_settled')]);
     } else {
-      settlements.forEach(s => rows.push([s.from, 'chuyển cho', s.to, Math.round(s.amount)]));
+      settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
     }
 
     const csvContent = rows.map(r => r.map(csvEscape).join(',')).join('\n');
@@ -1719,7 +2282,7 @@ function handleAction(e) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Đã tải file CSV');
+    showToast(t('toast_csv_done'));
   }
 
   if (action === 'copySummary') {
@@ -1729,47 +2292,48 @@ function handleAction(e) {
     const { peopleBalances } = splitCashFundBalance(rawBalances);
     const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
-    const settlements = simplifyDebts(peopleBalances);
+    const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     const usage = computeUsage(trip.members, expenses);
     const paid = computePaid(trip.members, expenses);
 
-    let text = `Tổng kết chia tiền - ${trip.name}\n\n`;
+    let text = `${t('export_summary_header')} - ${trip.name}\n\n`;
 
     // Danh sách chi tiêu
     expenses.slice().reverse().forEach(ex => {
       const amountText = ex.currency
-        ? `${ex.amount.toLocaleString('vi-VN')}${currencySymbol(ex.currency)} (≈${fmt(ex.amountVND)})`
-        : fmt(ex.amountVND);
-      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} trả ${amountText}${ex.desc ? ' cho ' + ex.desc : ''}\n`;
+        ? `${ex.amount.toLocaleString(numLocale())}${currencySymbol(ex.currency)} (≈${fmtHome(ex.amountHome, trip.homeCurrency)})`
+        : fmtHome(ex.amountHome, trip.homeCurrency);
+      text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} ${t('copy_paid_word')} ${amountText}${ex.desc ? ' ' + t('copy_for_word') + ' ' + ex.desc : ''}\n`;
     });
 
     // Bảng tổng quan 3 cột — pad bằng tab để thẳng hàng trong monospace font
-    text += '\nTổng quan:\n';
+    text += `\n${t('overview_title')}:\n`;
     const maxNameLen = Math.max(...trip.members.map(m => m.length), 4);
     const pad = (s, n) => String(s).padEnd(n);
-    text += `${pad('', maxNameLen + 2)}${pad('Đã chi', 10)}${pad('Đã dùng', 10)}Số dư\n`;
+    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${t('col_balance')}\n`;
     trip.members.forEach(m => {
-      const bal = Math.round(peopleBalances[m] || 0);
-      const note = bal > 100 ? ' (sẽ nhận lại)' : bal < -100 ? ' (cần trả thêm)' : ' (đã hòa sổ)';
-      const balStr = (bal > 0 ? '+' : '') + fmt(bal) + note;
-      text += `${pad(m, maxNameLen + 2)}${pad(fmt(paid[m] || 0), 10)}${pad(fmt(usage[m] || 0), 10)}${balStr}\n`;
+      const bal = roundCurrency(peopleBalances[m] || 0, trip.homeCurrency);
+      const TH = settleThreshold(trip.homeCurrency);
+      const note = bal > TH ? ` ${t('will_receive')}` : bal < -TH ? ` ${t('needs_to_pay')}` : ` ${t('settled')}`;
+      const balStr = (bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency) + note;
+      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, trip.homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, trip.homeCurrency), 10)}${balStr}\n`;
     });
 
     // Quỹ tiền mặt chung
     if (hasCashFund) {
-      text += '\nQuỹ tiền mặt chung còn lại:\n';
+      text += `\n${t('cash_fund_remaining')}:\n`;
       cashFundRemaining.forEach(r => {
-        const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmt(r.remaining);
+        const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, trip.homeCurrency);
         text += `  ${r.label}: ${display}\n`;
       });
     }
 
     // Kết quả thanh toán
-    text += '\nKết quả thanh toán:\n';
-    if (settlements.length === 0) text += 'Mọi người đã hòa sổ.\n';
-    else settlements.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmt(s.amount)}\n`; });
+    text += `\n${t('export_settlement_header')}:\n`;
+    if (settlements.length === 0) text += t('all_settled') + '\n';
+    else settlements.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmtHome(s.amount, currentHomeCurrency())}\n`; });
 
-    navigator.clipboard.writeText(text).then(() => showToast('Đã copy vào clipboard'));
+    navigator.clipboard.writeText(text).then(() => showToast(t('toast_copy_done')));
   }
 }
 
@@ -1783,101 +2347,113 @@ function renderModal() {
 
   if (modal === 'newTrip') {
     overlay.innerHTML = `<div class="modal">
-      <h2>Tạo trip mới</h2>
+      <h2>${t('new_trip_title')}</h2>
       <div class="field">
-        <label>Tên trip</label>
-        <input id="newTripInput" placeholder="Ví dụ: Đà Lạt 2026" value="${escapeHtml(newTripName)}">
+        <label>${t('new_trip_name_label')}</label>
+        <input id="newTripInput" placeholder="${t('new_trip_name_placeholder')}" value="${escapeHtml(newTripName)}">
+      </div>
+      <div class="field">
+        <label>${t('home_currency_label')}</label>
+        <select id="newTripHomeCurrencySelect">
+          ${ALL_HOME_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripHomeCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+        </select>
       </div>
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" id="useForeignCheckbox" ${newTripUseForeign ? 'checked' : ''} style="width:auto; height:auto;">
-          Trip này có chi tiêu bằng ngoại tệ
+          ${t('has_foreign_currency')}
         </label>
       </div>
       ${newTripUseForeign ? `
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>Đơn vị ngoại tệ</label>
+          <label>${t('foreign_currency_label')}</label>
           <select id="newTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === newTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
-            <option value="__custom__" ${newTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
+            <option value="__custom__" ${newTripCurrency === '__custom__' ? 'selected' : ''}>${t('custom_other')}</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
-          <label>1 ${escapeHtml(newTripCurrency === '__custom__' ? (newTripCustomCurrency || '?') : newTripCurrency)} = ? đ</label>
-          <input id="newTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(newTripRate)}">
+          <label>1 ${escapeHtml(newTripCurrency === '__custom__' ? (newTripCustomCurrency || '?') : newTripCurrency)} = ? ${escapeHtml(newTripHomeCurrency || 'VND')}</label>
+          <input id="newTripRateInput" type="number" step="any" placeholder="${t('rate_placeholder')}" value="${escapeHtml(newTripRate)}">
         </div>
       </div>
       ${newTripCurrency === '__custom__' ? `
       <div class="field">
-        <label>Mã/ký hiệu tiền tệ</label>
-        <input id="newTripCustomCurrencyInput" placeholder="ví dụ LAK, MYR, Kip..." value="${escapeHtml(newTripCustomCurrency)}">
+        <label>${t('custom_currency_label')}</label>
+        <input id="newTripCustomCurrencyInput" placeholder="${t('custom_currency_placeholder')}" value="${escapeHtml(newTripCustomCurrency)}">
       </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
-        Tỷ giá áp dụng chung cho cả trip, có thể sửa lại sau trong phần sửa tên trip.
+        ${t('trip_rate_hint')}
       </div>` : ''}
       <div class="row" style="justify-content:flex-end;">
-        <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.createTrip()">Tạo</button>
+        <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
+        <button class="primary" onclick="window.app.createTrip()">${t('btn_create')}</button>
       </div>
     </div>`;
   }
 
   if (modal === 'renameTrip') {
     overlay.innerHTML = `<div class="modal">
-      <h2>Sửa trip</h2>
+      <h2>${t('rename_trip_title')}</h2>
       <div class="field">
-        <label>Tên trip</label>
+        <label>${t('new_trip_name_label')}</label>
         <input id="renameTripInput" value="${escapeHtml(renameTripDraft)}">
+      </div>
+      <div class="field">
+        <label>${t('home_currency_label')}</label>
+        <select id="renameTripHomeCurrencySelect">
+          ${ALL_HOME_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === renameTripHomeCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
+        </select>
       </div>
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" id="useForeignCheckbox2" ${renameTripUseForeign ? 'checked' : ''} style="width:auto; height:auto;">
-          Trip này có chi tiêu bằng ngoại tệ
+          ${t('has_foreign_currency')}
         </label>
       </div>
       ${renameTripUseForeign ? `
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>Đơn vị ngoại tệ</label>
+          <label>${t('foreign_currency_label')}</label>
           <select id="renameTripCurrencySelect">
             ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === renameTripCurrency ? 'selected' : ''}>${c.code} (${c.symbol})</option>`).join('')}
-            <option value="__custom__" ${renameTripCurrency === '__custom__' ? 'selected' : ''}>Khác (tự nhập)...</option>
+            <option value="__custom__" ${renameTripCurrency === '__custom__' ? 'selected' : ''}>${t('custom_other')}</option>
           </select>
         </div>
         <div class="field" style="flex:1;">
-          <label>1 ${escapeHtml(renameTripCurrency === '__custom__' ? (renameTripCustomCurrency || '?') : renameTripCurrency)} = ? đ</label>
-          <input id="renameTripRateInput" type="number" step="any" placeholder="ví dụ 165" value="${escapeHtml(renameTripRate)}">
+          <label>1 ${escapeHtml(renameTripCurrency === '__custom__' ? (renameTripCustomCurrency || '?') : renameTripCurrency)} = ? ${escapeHtml(renameTripHomeCurrency || 'VND')}</label>
+          <input id="renameTripRateInput" type="number" step="any" placeholder="${t('rate_placeholder')}" value="${escapeHtml(renameTripRate)}">
         </div>
       </div>
       ${renameTripCurrency === '__custom__' ? `
       <div class="field">
-        <label>Mã/ký hiệu tiền tệ</label>
-        <input id="renameTripCustomCurrencyInput" placeholder="ví dụ LAK, MYR, Kip..." value="${escapeHtml(renameTripCustomCurrency)}">
+        <label>${t('custom_currency_label')}</label>
+        <input id="renameTripCustomCurrencyInput" placeholder="${t('custom_currency_placeholder')}" value="${escapeHtml(renameTripCustomCurrency)}">
       </div>` : ''}
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
-        Đổi tỷ giá sẽ áp dụng lại cho mọi chi tiêu ngoại tệ đã ghi trong trip này.
+        ${t('trip_rate_hint2')}
       </div>` : ''}
       <div class="row" style="justify-content:flex-end;">
-        <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.renameTrip()">Lưu</button>
+        <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
+        <button class="primary" onclick="window.app.renameTrip()">${t('btn_save')}</button>
       </div>
     </div>`;
   }
 
   if (modal === 'editMember') {
     overlay.innerHTML = `<div class="modal">
-      <h2>Sửa tên thành viên</h2>
+      <h2>${t('edit_member_title')}</h2>
       <div class="field">
-        <label>Tên</label>
+        <label>${t('member_rename_label')}</label>
         <input id="editMemberInput" value="${escapeHtml(editMemberDraft.newName)}">
         <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-          Mọi chi tiêu trước đây của <strong>${escapeHtml(editMemberDraft.oldName)}</strong> sẽ tự cập nhật theo tên mới.
+          ${t('member_rename_note_prefix')} <strong>${escapeHtml(editMemberDraft.oldName)}</strong> ${t('member_rename_note_suffix')}
         </div>
       </div>
       <div class="row" style="justify-content:flex-end;">
-        <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.renameMember()">Lưu</button>
+        <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
+        <button class="primary" onclick="window.app.renameMember()">${t('btn_save')}</button>
       </div>
     </div>`;
   }
@@ -1888,70 +2464,72 @@ function renderModal() {
     const hasForeign = !!trip.foreignCurrency;
     const isForeign = expDraft.currency === trip.foreignCurrency && hasForeign;
     overlay.innerHTML = `<div class="modal">
-      <h2>${isEditing ? 'Sửa chi tiêu' : 'Thêm chi tiêu'}</h2>
+      <h2>${expDraft && expDraft.id ? t('edit_expense_title') : t('add_expense_title')}</h2>
       <div class="field">
-        <label>Ai trả</label>
+        <label>${t('paid_by_label')}</label>
         <select id="paidBySelect">
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
-          <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>💰 ${CASH_FUND_NAME} (tiền mặt)</option>
+          <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>${t('cash_fund_payer_option')}</option>
         </select>
       </div>
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>Ngày</label>
+          <label>${t('date_label')}</label>
           <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
         </div>
         <div class="field" style="flex:1;">
-          <label>Giờ</label>
+          <label>${t('time_label')}</label>
           <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
         </div>
       </div>
       ${hasForeign ? `
       <div class="field">
-        <label>Đơn vị tiền</label>
+        <label>${t('currency_label')}</label>
         <div class="row">
-          <span class="pill ${!isForeign ? 'active' : ''}" data-set-currency="">VNĐ</span>
+          <span class="pill ${!isForeign ? 'active' : ''}" data-set-currency="">${trip.homeCurrency || 'VND'}</span>
           <span class="pill ${isForeign ? 'active' : ''}" data-set-currency="${escapeHtml(trip.foreignCurrency)}">${escapeHtml(trip.foreignCurrency)} (${currencySymbol(trip.foreignCurrency)})</span>
         </div>
       </div>` : ''}
       <div class="field">
-        <label>Số tiền ${isForeign
-          ? `<span style="color:var(--text-muted); font-weight:400;">(đơn vị: ${escapeHtml(trip.foreignCurrency)})</span>`
-          : `<span style="color:var(--text-muted); font-weight:400;">(đơn vị: ngàn đồng)</span>`}
+        <label>${t('amount_label')} ${isForeign
+          ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>`
+          : (trip.homeCurrency || 'VND') === 'VND'
+            ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_vnd')}</span>`
+            : `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.homeCurrency)})</span>`}
         </label>
-        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? 'ví dụ 5000' : 'ví dụ 90 = 90.000đ'}" value="${expDraft.amountInputRaw}">
-        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmt(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount)) : ''}</div>
+        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}">
+        <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</div>
       </div>
       <div class="field">
-        <label>Mô tả <span style="color:var(--text-muted); font-weight:400;">(không bắt buộc)</span></label>
-        <input id="descInput" placeholder="Ăn tối, taxi, khách sạn..." value="${escapeHtml(expDraft.desc)}">
+        <label>${t('desc_label')}</label>
+        <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}">
       </div>
       <div class="field">
-        <label>Loại chi tiêu</label>
+        <label>${t('cat_label')}</label>
         <select id="categorySelect">
-          ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+          ${CATEGORIES.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
         </select>
       </div>
       ${expDraft.category === 'fund' ? `
       <div style="font-size:12px; color:var(--text-muted); margin:-6px 0 14px;">
-        Khoản góp quỹ chỉ cộng vào số dư của người góp, không chia cho ai.
+        ${t('fund_contribution_note')}
       </div>` : expDraft.category === 'payment' ? `
       <div class="field">
-        <label>Người nhận <span style="color:var(--danger); font-size:11px;">(bắt buộc chọn đúng 1 người)</span></label>
+        <label>${t('payment_recipient_label')} <span style="color:var(--danger); font-size:11px;">${t('payment_recipient_hint')}</span></label>
         <div class="row">
           ${trip.members.map(m => m === expDraft.paidBy ? '' : `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
         </div>
-        <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">Khoản thanh toán loại trừ khỏi thống kê chi tiêu nhưng vẫn tính vào số dư.</div>
+        <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">${t('payment_note')}</div>
       </div>` : `
       <div class="field">
-        <label>Chia cho (bỏ trống = cả nhóm)</label>
+        <label>${t('split_label')}</label>
         <div class="row">
           ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
         </div>
       </div>`}
       <div class="row" style="justify-content:flex-end; margin-top: 8px;">
-        <button onclick="window.app.closeModal()">Hủy</button>
-        <button class="primary" onclick="window.app.submitExpense()">${isEditing ? 'Lưu thay đổi' : 'Lưu chi tiêu'}</button>
+        <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
+        <button class="primary" onclick="window.app.submitExpense()">${expDraft && expDraft.id ? t('save_changes_btn') : t('save_expense_btn')}</button>
       </div>
     </div>`;
   }
@@ -1976,10 +2554,12 @@ function renderModal() {
       customCurInput.addEventListener('input', e => {
         newTripCustomCurrency = e.target.value.trim().toUpperCase();
         const labelEl = rateInput && rateInput.closest('.field').querySelector('label');
-        if (labelEl) labelEl.innerHTML = `1 ${newTripCustomCurrency || '?'} = ? đ`;
+        if (labelEl) labelEl.innerHTML = `1 ${escapeHtml(newTripCustomCurrency || '?')} = ? ${escapeHtml(newTripHomeCurrency || 'VND')}`;
       });
       customCurInput.focus();
     }
+    const homeSelNew = document.getElementById('newTripHomeCurrencySelect');
+    if (homeSelNew) homeSelNew.addEventListener('change', e => { newTripHomeCurrency = e.target.value; renderModal(); });
   }
   if (modal === 'renameTrip') {
     const inp = document.getElementById('renameTripInput');
@@ -1991,6 +2571,8 @@ function renderModal() {
     if (useForeignCb2) useForeignCb2.addEventListener('change', e => { renameTripUseForeign = e.target.checked; renderModal(); });
     const curSelect2 = document.getElementById('renameTripCurrencySelect');
     if (curSelect2) curSelect2.addEventListener('change', e => { renameTripCurrency = e.target.value; renderModal(); });
+    const homeSelRename = document.getElementById('renameTripHomeCurrencySelect');
+    if (homeSelRename) homeSelRename.addEventListener('change', e => { renameTripHomeCurrency = e.target.value; renderModal(); });
     const rateInput2 = document.getElementById('renameTripRateInput');
     if (rateInput2) rateInput2.addEventListener('input', e => renameTripRate = e.target.value);
     const customCurInput2 = document.getElementById('renameTripCustomCurrencyInput');
@@ -1998,7 +2580,7 @@ function renderModal() {
       customCurInput2.addEventListener('input', e => {
         renameTripCustomCurrency = e.target.value.trim().toUpperCase();
         const labelEl = rateInput2 && rateInput2.closest('.field').querySelector('label');
-        if (labelEl) labelEl.innerHTML = `1 ${renameTripCustomCurrency || '?'} = ? đ`;
+        if (labelEl) labelEl.innerHTML = `1 ${escapeHtml(renameTripCustomCurrency || '?')} = ? ${escapeHtml(renameTripHomeCurrency || 'VND')}`;
       });
       customCurInput2.focus();
     }
@@ -2022,15 +2604,15 @@ function renderModal() {
       if (isNaN(typed)) {
         expDraft.amount = '';
       } else {
-        expDraft.amount = isForeign ? String(typed) : String(typed * 1000);
+        expDraft.amount = isForeign ? String(typed) : (trip.homeCurrency === 'VND' ? String(typed * 1000) : String(typed));
       }
       const preview = document.getElementById('amountPreview');
       if (preview) {
         if (isNaN(typed) || typed <= 0) {
           preview.textContent = '';
         } else {
-          const vnd = isForeign ? typed * (parseFloat(trip.exchangeRate) || 0) : typed * 1000;
-          preview.textContent = '= ' + fmt(vnd);
+          const vnd = isForeign ? typed * (parseFloat(trip.exchangeRate) || 0) : (trip.homeCurrency === 'VND' ? typed * 1000 : typed);
+          preview.textContent = '= ' + fmtHome(vnd, trip.homeCurrency);
         }
       }
     }
@@ -2074,7 +2656,7 @@ window.app = {
       btn.style.animation = '';
       btn.disabled = false;
     }
-    showToast('Đã đồng bộ dữ liệu mới nhất');
+    showToast(t('sync_done'));
   },
 
   openHelp() {
@@ -2083,51 +2665,51 @@ window.app = {
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `<div class="modal" style="max-width:480px;">
       <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
-        <h2 style="margin:0;">Hướng dẫn sử dụng</h2>
-        <button class="icon-btn" onclick="window.app.closeHelp()" aria-label="Đóng">✕</button>
+        <h2 style="margin:0;">${t('help_title')}</h2>
+        <button class="icon-btn" onclick="window.app.closeHelp()" aria-label="${t('aria_close')}">✕</button>
       </div>
 
       <div style="font-size:13.5px; line-height:1.6; color:var(--text-primary);">
 
-        <p style="font-weight:600; margin-bottom:4px;">1. Bắt đầu</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_1_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Lần đầu mở app, bạn đặt 1 tên riêng (không trùng người khác) để tách dữ liệu của bạn khỏi người khác cùng dùng app này. App tự nhớ tên đó cho các lần mở sau, không cần nhập lại.
+          ${t('help_1_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">2. Tạo trip và ghi chi tiêu</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_2_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Bấm "+ Trip mới" → đặt tên trip → thêm thành viên. Mỗi lần chi tiêu, bấm "+ Thêm chi tiêu", chọn ai trả, số tiền (nhập theo <strong>ngàn đồng</strong>, vd gõ 90 = 90.000đ), và chia cho ai (bỏ trống = chia đều cả nhóm).
+          ${t('help_2_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">3. Xem kết quả</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_3_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          App tự tính "Số dư từng người" và "Kết quả chia tiền" — số giao dịch ít nhất để mọi người hòa sổ. Bấm 📋 để copy gửi nhóm, ⬇️ để tải CSV, 🖼️ để tải ảnh tổng kết đẹp.
+          ${t('help_3_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">4. Chi tiêu bằng ngoại tệ</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_4_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Khi tạo trip, tick "Có chi tiêu bằng ngoại tệ", chọn đơn vị và nhập tỷ giá quy đổi sang VNĐ. Khi ghi chi tiêu, chọn đúng đơn vị (VNĐ hoặc ngoại tệ) — app tự quy đổi và vẫn hiện rõ số tiền gốc để đối chiếu.
+          ${t('help_4_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">5. Quỹ tiền mặt chung</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_5_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Khi ai đó góp tiền vào quỹ chung của cả nhóm, chọn loại chi tiêu "Góp quỹ". Khi chi tiêu bằng tiền mặt từ quỹ, chọn "💰 Quỹ chung" ở mục "Ai trả". App tự tính số tiền mặt còn lại trong quỹ, tách riêng khỏi công nợ giữa mọi người.
+          ${t('help_5_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">6. Xem chi tiết từng thành viên</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_6_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Trong bảng "Tổng quan từng người", bấm vào <u>tên</u> bất kỳ thành viên nào để xem popup chi tiết — bao gồm số tiền đã chi/đã dùng/số dư, và danh sách đầy đủ các giao dịch mà người đó có phần, kèm đúng số tiền họ phải chịu trong từng giao dịch.
+          ${t('help_6_body')}
         </p>
 
-        <p style="font-weight:600; margin-bottom:4px;">7. Khác</p>
+        <p style="font-weight:600; margin-bottom:4px;">${t('help_7_title')}</p>
         <p style="margin-top:0; color:var(--text-secondary);">
-          Bấm tên thành viên trong card "Thành viên" để sửa tên · bấm ✏️ trên chi tiêu để sửa lại · "Lưu trữ trip" để ẩn trip cũ khỏi danh sách chính mà không mất dữ liệu · bộ lọc theo người/loại chi tiêu nằm ngay trên danh sách chi tiêu · bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác.
+          ${t('help_7_body')}
         </p>
 
       </div>
 
       <div class="row" style="justify-content:flex-end; margin-top:14px;">
-        <button class="primary" onclick="window.app.closeHelp()">Đã hiểu</button>
+        <button class="primary" onclick="window.app.closeHelp()">${t('help_got_it')}</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2157,10 +2739,11 @@ window.app = {
       })
       .slice() // giữ nguyên order (mới nhất trước)
 
-    const bal = Math.round(peopleBalances[memberName] || 0);
-    const balCls = bal > 100 ? 'color:#1A9461' : bal < -100 ? 'color:#D6453A' : 'color:var(--text-muted)';
+    const bal = roundCurrency(peopleBalances[memberName] || 0, trip.homeCurrency);
+    const TH = settleThreshold(trip.homeCurrency);
+    const balCls = bal > TH ? 'color:#1A9461' : bal < -TH ? 'color:#D6453A' : 'color:var(--text-muted)';
     const balSign = bal > 0 ? '+' : '';
-    const balNote = bal > 100 ? 'sẽ nhận lại' : bal < -100 ? 'cần trả thêm' : 'đã hòa sổ';
+    const balNote = bal > TH ? t('will_receive').replace(/[()]/g,'') : bal < -TH ? t('needs_to_pay').replace(/[()]/g,'') : t('settled').replace(/[()]/g,'');
 
     let rowsHtml = '';
     myExpenses.forEach(e => {
@@ -2171,20 +2754,20 @@ window.app = {
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
           <div style="flex:1; min-width:0;">
             <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span>
-            <span style="font-size:13.5px;">${e.desc ? escapeHtml(e.desc) : escapeHtml(e.paidBy) + ' đã trả'}</span>
-            ${isPayer ? `<span style="font-size:11px; color:var(--accent-text); background:var(--accent-bg); padding:1px 5px; border-radius:4px; margin-left:4px;">người trả</span>` : ''}
-            <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${escapeHtml(e.date)} · ${escapeHtml(e.paidBy)} trả ${fmt(e.amountVND)} · chia ${splitMembers.length} người</div>
+            <span style="font-size:13.5px;">${e.desc ? escapeHtml(e.desc) : escapeHtml(e.paidBy) + ' ' + t('paid_suffix')}</span>
+            ${isPayer ? `<span style="font-size:11px; color:var(--accent-text); background:var(--accent-bg); padding:1px 5px; border-radius:4px; margin-left:4px;">${t('payer_badge')}</span>` : ''}
+            <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${escapeHtml(e.date)} · ${escapeHtml(e.paidBy)} ${t('export_transfers_for')} ${fmtHome(e.amountHome, trip.homeCurrency || currentHomeCurrency())} · ${t('share_for')} ${splitMembers.length}</div>
           </div>
           <div style="text-align:right; flex-shrink:0;">
-            <div style="font-size:14px; font-weight:600;">−${fmt(myShare)}</div>
-            <div style="font-size:11px; color:var(--text-muted);">phần của tôi</div>
+            <div style="font-size:14px; font-weight:600;">−${fmtHome(myShare, currentHomeCurrency())}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${t('my_share_label')}</div>
           </div>
         </div>
       </div>`;
     });
 
     if (myExpenses.length === 0) {
-      rowsHtml = `<p style="color:var(--text-muted); font-size:13.5px; text-align:center; padding:24px 0;">Chưa có giao dịch nào.</p>`;
+      rowsHtml = `<p style="color:var(--text-muted); font-size:13.5px; text-align:center; padding:24px 0;">${t('no_transactions_yet')}</p>`;
     }
 
     const overlay = document.createElement('div');
@@ -2193,32 +2776,32 @@ window.app = {
     overlay.innerHTML = `<div class="modal" style="max-width:480px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
         <h2 style="margin:0;">👤 ${escapeHtml(memberName)}</h2>
-        <button class="icon-btn" onclick="window.app.closeMemberDetail()" aria-label="Đóng">✕</button>
+        <button class="icon-btn" onclick="window.app.closeMemberDetail()" aria-label="${t('aria_close')}">✕</button>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:12px 0; padding:12px; background:var(--surface-2); border-radius:var(--radius-sm);">
         <div style="text-align:center;">
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">ĐÃ CHI</div>
-          <div style="font-size:15px; font-weight:600;">${fmt(paid[memberName] || 0)}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${t('overview_paid')}</div>
+          <div style="font-size:15px; font-weight:600;">${fmtHome(paid[memberName] || 0, currentHomeCurrency())}</div>
         </div>
         <div style="text-align:center; border-left:1px solid var(--border); border-right:1px solid var(--border);">
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">ĐÃ DÙNG</div>
-          <div style="font-size:15px; font-weight:600;">${fmt(usage[memberName] || 0)}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${t('overview_used')}</div>
+          <div style="font-size:15px; font-weight:600;">${fmtHome(usage[memberName] || 0, currentHomeCurrency())}</div>
         </div>
         <div style="text-align:center;">
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">SỐ DƯ</div>
-          <div style="font-size:15px; font-weight:600; ${balCls}">${balSign}${fmt(bal)}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${t('overview_balance')}</div>
+          <div style="font-size:15px; font-weight:600; ${balCls}">${balSign}${fmtHome(bal, currentHomeCurrency())}</div>
         </div>
       </div>
       <div style="font-size:11.5px; color:var(--text-muted); text-align:center; margin-bottom:12px;">${balNote}</div>
 
-      <div style="font-weight:600; font-size:13px; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.03em;">Giao dịch có phần (${myExpenses.length})</div>
+      <div style="font-weight:600; font-size:13px; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.03em;">${t('transactions_involved')} (${myExpenses.length})</div>
       <div style="max-height:50vh; overflow-y:auto;">
         ${rowsHtml}
       </div>
 
       <div class="row" style="justify-content:flex-end; margin-top:14px;">
-        <button class="primary" onclick="window.app.closeMemberDetail()">Đóng</button>
+        <button class="primary" onclick="window.app.closeMemberDetail()">${t('close_btn')}</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2250,32 +2833,34 @@ window.app = {
     const name = newTripName.trim();
     if (!name) return;
     if (newTripUseForeign && newTripCurrency === '__custom__' && !newTripCustomCurrency.trim()) {
-      showToast('Nhập mã/ký hiệu tiền tệ trước khi tạo trip');
+      showToast(t('toast_need_name'));
       return;
     }
     const id = uid();
     const resolvedCurrency = newTripCurrency === '__custom__' ? newTripCustomCurrency.trim().toUpperCase() : newTripCurrency;
     const foreignCurrency = newTripUseForeign ? resolvedCurrency : '';
     const exchangeRate = newTripUseForeign ? (parseFloat(newTripRate) || '') : '';
+    const homeCurrency = newTripHomeCurrency || 'VND';
     modal = null;
     withSaving(
       () => {
-        rawTrips.push({ trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate });
+        rawTrips.push({ trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate, home_currency: homeCurrency });
         activeTripId = id;
       },
-      () => apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate })
+      () => apiPost({ action: 'createTrip', trip_id: id, trip_name: name, members: '', foreign_currency: foreignCurrency, exchange_rate: exchangeRate, home_currency: homeCurrency })
     );
     newTripUseForeign = false;
     newTripCurrency = 'USD';
     newTripCustomCurrency = '';
     newTripRate = '';
+    newTripHomeCurrency = 'VND';
   },
 
   renameTrip() {
     const name = renameTripDraft.trim();
     if (!name) return;
     if (renameTripUseForeign && renameTripCurrency === '__custom__' && !renameTripCustomCurrency.trim()) {
-      showToast('Nhập mã/ký hiệu tiền tệ trước khi lưu');
+      showToast(t('toast_need_name2'));
       return;
     }
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
@@ -2289,20 +2874,22 @@ window.app = {
     if (oldCurrency && newCurrency && oldCurrency !== newCurrency) {
       const hasOldCurrencyExpenses = rawExpenses.some(e => e.trip_id === activeTripId && e.currency === oldCurrency);
       if (hasOldCurrencyExpenses) {
-        showToast(`Trip đã có chi tiêu bằng ${oldCurrency}, không thể đổi sang ${newCurrency}`);
+        showToast(`${t('toast_cant_change_currency')} ${oldCurrency}${t('toast_cant_change_suffix')} ${newCurrency}`);
         return;
       }
     }
 
+    const newHomeCurrency = renameTripHomeCurrency || 'VND';
     modal = null;
     withSaving(
       () => {
         trip.trip_name = name;
         trip.foreign_currency = newCurrency;
         trip.exchange_rate = newRate;
+        trip.home_currency = newHomeCurrency;
       },
       () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name }).then(() =>
-        apiPost({ action: 'setTripCurrency', trip_id: activeTripId, foreign_currency: newCurrency, exchange_rate: newRate })
+        apiPost({ action: 'setTripCurrency', trip_id: activeTripId, foreign_currency: newCurrency, exchange_rate: newRate, home_currency: newHomeCurrency })
       )
     );
   },
@@ -2315,7 +2902,7 @@ window.app = {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     const currentMembers = parseMembers(trip.members);
     if (currentMembers.includes(newName)) {
-      showToast('Đã có thành viên tên này trong trip');
+      showToast(t('toast_dup_member'));
       return;
     }
     const newMembers = currentMembers.map(m => m === oldName ? newName : m);
@@ -2360,12 +2947,12 @@ window.app = {
   submitExpense() {
     const amt = parseFloat(expDraft.amount);
     if (!expDraft.paidBy || !amt || amt <= 0 || !expDraft.date) {
-      showToast('Điền đủ thông tin trước khi lưu');
+      showToast(t('fill_required'));
       return;
     }
     const isPayment = expDraft.category === 'payment';
     if (isPayment && expDraft.splitWith.length !== 1) {
-      showToast('Khoản thanh toán phải chọn đúng 1 người nhận');
+      showToast(t('payment_error'));
       return;
     }
     modal = null;
@@ -2429,28 +3016,33 @@ function startApp(workspaceId) {
 
 function renderWorkspaceSetup(existingWarning) {
   const app = document.getElementById('app');
+  const langBtn = document.getElementById('langToggleBtn');
+  if (langBtn) { langBtn.textContent = appLang === 'vi' ? 'EN' : 'VI'; langBtn.title = appLang === 'vi' ? 'Switch to English' : 'Chuyển sang tiếng Việt'; }
+  const wsTitle = appLang === 'en' ? 'Your workspace' : 'Tạo không gian của bạn';
+  const wsDesc = appLang === 'en'
+    ? 'Choose a unique name to store your trips, separate from other users. Example: your name or a unique alias (e.g. <em>phong-2026</em>).'
+    : 'Đặt một tên riêng để lưu trữ trip của bạn, tách biệt với người khác cùng dùng app này. Ví dụ: tên bạn hoặc một biệt danh không trùng với ai (vd: <em>phong-2026</em>).';
+  const wsLabel = appLang === 'en' ? 'Workspace name' : 'Tên không gian';
+  const wsPlaceholder = appLang === 'en' ? 'e.g. phong-2026' : 'vd: phong-2026';
+  const wsContinue = appLang === 'en' ? 'Continue' : 'Tiếp tục';
   app.innerHTML = `
     <div class="card" style="max-width:420px; margin:2rem auto;">
-      <div class="card-head"><span class="card-title">Tạo không gian của bạn</span></div>
-      <p style="font-size:13.5px; color:var(--text-secondary); margin-top:0;">
-        Đặt một tên riêng để lưu trữ trip của bạn, tách biệt với người khác cùng dùng app này.
-        Ví dụ: tên bạn hoặc một biệt danh không trùng với ai (vd: <em>phong-2026</em>).
-      </p>
+      <div class="card-head"><span class="card-title">${wsTitle}</span></div>
+      <p style="font-size:13.5px; color:var(--text-secondary); margin-top:0;">${wsDesc}</p>
       <div class="field">
-        <label>Tên không gian</label>
-        <input id="workspaceInput" placeholder="vd: phong-2026" autocomplete="off">
+        <label>${wsLabel}</label>
+        <input id="workspaceInput" placeholder="${wsPlaceholder}" autocomplete="off">
       </div>
       <div id="workspaceWarning"></div>
       <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <button class="primary" onclick="window.app.confirmWorkspace()">Tiếp tục</button>
+        <button class="primary" onclick="window.app.confirmWorkspace()">${wsContinue}</button>
       </div>
     </div>
   `;
   if (existingWarning) {
     document.getElementById('workspaceWarning').innerHTML = `
       <div class="setup-banner" style="margin-bottom:0;">
-        Tên "<strong>${escapeHtml(existingWarning)}</strong>" đã có dữ liệu trip từ trước.
-        Nếu đây không phải không gian của bạn, hãy đổi sang tên khác để tránh nhầm lẫn với người khác.
+        ${appLang === 'en' ? `The name "<strong>${escapeHtml(existingWarning)}</strong>" already has trip data. If this is not your workspace, please choose a different name.` : `Tên "<strong>${escapeHtml(existingWarning)}</strong>" đã có dữ liệu trip từ trước. Nếu đây không phải không gian của bạn, hãy đổi sang tên khác.`}
       </div>`;
   }
   document.getElementById('workspaceInput').focus();
@@ -2460,11 +3052,11 @@ window.app.confirmWorkspace = async function() {
   const input = document.getElementById('workspaceInput');
   const name = input.value.trim();
   if (!name) {
-    showToast('Nhập tên không gian trước khi tiếp tục');
+    showToast(t('workspace_required'));
     return;
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-    showToast('Chỉ dùng chữ, số, dấu gạch ngang/gạch dưới, không dấu cách');
+    showToast(t('workspace_invalid'));
     return;
   }
   try {
@@ -2480,7 +3072,7 @@ window.app.confirmWorkspace = async function() {
     }
     startApp(name);
   } catch (err) {
-    showToast('Lỗi kết nối, thử lại sau: ' + err.message);
+    showToast(t('connect_error') + err.message);
   }
 };
 
