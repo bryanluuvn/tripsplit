@@ -2968,6 +2968,7 @@ window.app = {
   },
 
   openMemberDetail(memberName) {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     if (!trip) return;
     const expenses = getExpensesForTrip(trip);
     const paid = computePaid(trip.members, expenses);
