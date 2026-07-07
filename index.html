@@ -356,6 +356,7 @@
       <h1>Trip Split</h1>
     </div>
     <div class="row" style="gap:10px;">
+      <button class="icon-btn" onclick="window.app.openShare()" aria-label="${t('share_title')}" title="${t('share_title')}" style="font-size:15px;">🔗</button>
       <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="${t('sync_latest')}" title="${t('sync_latest')}" style="font-size:15px;" id="refreshBtn">↻</button>
       <button class="icon-btn" onclick="window.app.openHelp()" aria-label="${t('help_title')}" title="${t('help_title')}" style="font-size:15px;">❓</button>
       <button class="icon-btn lang-toggle-btn" onclick="toggleAppLang()" id="langToggleBtn" title="Switch language / Đổi ngôn ngữ" style="font-size:12px; font-weight:700; min-width:32px; letter-spacing:0.02em;">EN</button>
@@ -581,6 +582,11 @@ const APP_TRANSLATIONS = {
     sync_error_title: 'Lỗi đồng bộ - kiểm tra mạng',
     syncing_title: 'Đang đồng bộ...',
     offline_title: 'Đang offline - dữ liệu sẽ đồng bộ khi online',
+    share_title: 'Chia sẻ landing page',
+    share_heading: 'Mời người khác',
+    share_desc: 'Chia sẻ link này để mời bạn bè tham gia',
+    share_copy_btn: 'Sao chép link',
+    share_copied: 'Đã sao chép!',
     load_error_prefix: 'Không tải được dữ liệu:',
     retry_btn: 'Thử lại',
     api_not_configured: 'Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.',
@@ -803,6 +809,11 @@ const APP_TRANSLATIONS = {
     sync_error_title: 'Sync error - check connection',
     syncing_title: 'Syncing...',
     offline_title: 'Offline - data will sync when back online',
+    share_title: 'Share landing page',
+    share_heading: 'Invite others',
+    share_desc: 'Share this link to invite friends to join',
+    share_copy_btn: 'Copy link',
+    share_copied: 'Copied!',
     load_error_prefix: 'Could not load data:',
     retry_btn: 'Retry',
     api_not_configured: 'API_URL is not configured yet. Open index.html and paste your Google Apps Script Web App link into the API_URL variable near the top of the &lt;script&gt; section.',
@@ -2890,8 +2901,73 @@ window.app = {
     if (overlay) overlay.remove();
   },
 
+  openShare() {
+    const baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
+    const landingUrl = baseUrl + 'landing.html';
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'shareOverlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="max-width:480px;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <h2 style="margin:0;">${t('share_heading')}</h2>
+        <button class="icon-btn" onclick="window.app.closeShare()" aria-label="${t('aria_close')}">✕</button>
+      </div>
+      
+      <p style="font-size:13.5px; color:var(--text-secondary); margin:0 0 12px;">${t('share_desc')}</p>
+      
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <input id="shareUrlInput" type="text" readonly value="${escapeHtml(landingUrl)}" style="
+          flex:1;
+          padding:10px 12px;
+          border:1px solid var(--border);
+          border-radius:var(--radius-sm);
+          font-size:13px;
+          font-family:monospace;
+          background:var(--surface-2);
+          color:var(--text-primary);
+        ">
+        <button class="primary" id="shareCopyBtn" onclick="window.app.copyShareLink()" style="min-width:auto; padding:10px 16px;">
+          ${t('share_copy_btn')}
+        </button>
+      </div>
+      
+      <div style="font-size:12px; color:var(--text-muted); background:var(--surface-2); padding:10px; border-radius:var(--radius-sm);">
+        🔗 ${appLang === 'vi' ? 'Chia sẻ link này trên Messenger, Zalo, hoặc bất kỳ đâu' : 'Share this link on Messenger, email, or anywhere'}
+      </div>
+      
+      <div class="row" style="justify-content:flex-end; margin-top:14px;">
+        <button class="primary" onclick="window.app.closeShare()">${appLang === 'vi' ? 'Đóng' : 'Close'}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) window.app.closeShare(); });
+  },
+
+  closeShare() {
+    const overlay = document.getElementById('shareOverlay');
+    if (overlay) overlay.remove();
+  },
+
+  copyShareLink() {
+    const input = document.getElementById('shareUrlInput');
+    if (!input) return;
+    
+    input.select();
+    try {
+      document.execCommand('copy');
+      const btn = document.getElementById('shareCopyBtn');
+      const originalText = btn.textContent;
+      btn.textContent = t('share_copied');
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 1500);
+    } catch (err) {
+      console.warn('Copy failed:', err);
+    }
+  },
+
   openMemberDetail(memberName) {
-    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     if (!trip) return;
     const expenses = getExpensesForTrip(trip);
     const paid = computePaid(trip.members, expenses);
