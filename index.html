@@ -2161,6 +2161,8 @@ async function processQueue() {
       // Lỗi: hoàn tác về snapshot của request này (gần nhất với state thật lúc đó)
       rawTrips = snapshotTrips;
       rawExpenses = snapshotExpenses;
+      // Update offline storage with rolled-back data
+      await saveOffline(rawTrips, rawExpenses);
       // Xóa sạch queue còn lại vì state đã bị hoàn tác, các request sau không còn hợp lệ
       requestQueue.length = 0;
       showToast(t('sync_undo_error_prefix') + ' ' + err.message);
@@ -2184,6 +2186,9 @@ async function withSaving(applyLocal, sendRequest) {
   if (applyLocal) applyLocal();
   render();
   setSyncDot('loading');
+
+  // IMPORTANT: Save to offline storage immediately so data persists if page is refreshed
+  await saveOffline(rawTrips, rawExpenses);
 
   requestQueue.push({ sendRequest, snapshotTrips, snapshotExpenses });
   processQueue(); // không await — chạy ngầm, không chặn UI
