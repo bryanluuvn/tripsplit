@@ -3250,13 +3250,28 @@ function getWorkspaceFromUrl() {
 function startApp(workspaceId) {
   WORKSPACE_ID = workspaceId;
   localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId);
-  // Đồng bộ luôn lên URL để bookmark/chia sẻ lại đúng workspace này
   const url = new URL(window.location.href);
   url.searchParams.set('ws', workspaceId);
   window.history.replaceState({}, '', url);
 
   document.getElementById('app').innerHTML = '';
-  refreshData(true);
+  
+  // 🚀 OPTIMIZATION: Load cached data immediately, then fetch fresh
+  loadOffline().then(cachedData => {
+    if (cachedData.trips && cachedData.trips.length > 0) {
+      // Show cached data immediately
+      rawTrips = cachedData.trips;
+      rawExpenses = cachedData.expenses || [];
+      isLoading = false;
+      render();
+    }
+    // Then fetch fresh data in background
+    refreshData(true);
+  }).catch(() => {
+    // Fallback: just fetch fresh
+    refreshData(true);
+  });
+  
   startPolling();
 }
 
