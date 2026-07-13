@@ -226,6 +226,8 @@
     background: var(--navy); color: white; border-color: var(--navy);
   }
   .tab.add-tab { color: var(--accent-text); border-color: var(--accent-bg); background: var(--accent-bg); }
+  .tab.dragging { opacity: 0.5; }
+  .tab.drag-over-tab { border-color: var(--accent-text); background: var(--accent-bg); }
 
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -356,6 +358,7 @@
       <h1>Trip Split</h1>
     </div>
     <div class="row" style="gap:10px;">
+      <button class="icon-btn" onclick="window.app.switchWorkspace()" aria-label="Switch workspace / Đổi workspace" title="Switch workspace / Đổi workspace" style="font-size:15px;">🏠</button>
       <button class="icon-btn" onclick="window.app.openShare()" aria-label="${t('share_title')}" title="${t('share_title')}" style="font-size:15px;">🔗</button>
       <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="${t('sync_latest')}" title="${t('sync_latest')}" style="font-size:15px;" id="refreshBtn">↻</button>
       <button class="icon-btn" onclick="window.app.openHelp()" aria-label="${t('help_title')}" title="${t('help_title')}" style="font-size:15px;">❓</button>
@@ -1654,6 +1657,7 @@ if ('serviceWorker' in navigator) {
 // ---- State ----
 let rawTrips = [];     // raw rows từ Sheet Trips
 let rawExpenses = [];  // raw rows từ Sheet Expenses
+let tripOrder = [];    // Custom trip order (trip_id array) - persisted in localStorage
 let activeTripId = null;
 let modal = null;
 let expDraft = { id: null, paidBy: '', amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [], date: '', time: '', category: '' };
@@ -1720,6 +1724,28 @@ function getTripObjects() {
     exchangeRate: t.exchange_rate || '',
     homeCurrency: t.home_currency || 'VND',
   }));
+}
+
+// Sort trips by custom order (tripOrder array)
+function getSortedTrips(trips) {
+  if (tripOrder.length === 0) return trips;
+  
+  // Put trips in tripOrder sequence first, then append any new trips not in order
+  const sorted = [];
+  const remaining = new Set(trips.map(t => t.trip_id));
+  
+  for (const id of tripOrder) {
+    const trip = trips.find(t => t.trip_id === id);
+    if (trip) {
+      sorted.push(trip);
+      remaining.delete(id);
+    }
+  }
+  
+  // Append remaining trips
+  sorted.push(...trips.filter(t => remaining.has(t.trip_id)));
+  
+  return sorted;
 }
 function getExpensesForTrip(trip) {
   return rawExpenses
@@ -1892,6 +1918,56 @@ function initMemberDragSort() {
   });
 }
 
+function initTripDragSort() {
+  const container = document.querySelector('.tabs');
+  if (!container) return;
+  const tabs = Array.from(container.querySelectorAll('.tab[data-id]:not(.add-tab)'));
+  if (tabs.length < 2) return;
+
+  let dragSrc = null;
+
+  function saveTripOrder() {
+    const newOrder = Array.from(container.querySelectorAll('.tab[data-id]:not(.add-tab)'))
+      .map(tab => tab.dataset.id);
+    tripOrder = newOrder;
+    localStorage.setItem(`tripOrder_${WORKSPACE_ID}`, JSON.stringify(tripOrder));
+  }
+
+  tabs.forEach(tab => {
+    tab.draggable = true;
+    
+    tab.addEventListener('dragstart', e => {
+      dragSrc = tab;
+      tab.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/html', tab.innerHTML);
+    });
+    
+    tab.addEventListener('dragend', () => {
+      tab.classList.remove('dragging');
+      container.querySelectorAll('.drag-over-tab').forEach(el => el.classList.remove('drag-over-tab'));
+      dragSrc = null;
+    });
+    
+    tab.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (tab !== dragSrc) tab.classList.add('drag-over-tab');
+    });
+    
+    tab.addEventListener('dragleave', () => tab.classList.remove('drag-over-tab'));
+    
+    tab.addEventListener('drop', e => {
+      e.preventDefault();
+      tab.classList.remove('drag-over-tab');
+      if (!dragSrc || dragSrc === tab) return;
+      
+      // Reorder: insert dragSrc before tab
+      container.insertBefore(dragSrc, tab);
+      saveTripOrder();
+    });
+  });
+}
+
 function render() {
   const app = document.getElementById('app');
   // Update lang toggle button
@@ -1916,8 +1992,9 @@ function render() {
   }
 
   const allTrips = getTripObjects();
-  const activeTrips = allTrips.filter(t => !t.archived);
-  const archivedTrips = allTrips.filter(t => t.archived);
+  const sortedTrips = getSortedTrips(rawTrips).map(rt => allTrips.find(at => at.trip_id === rt.trip_id)).filter(Boolean);
+  const activeTrips = sortedTrips.filter(t => !t.archived);
+  const archivedTrips = sortedTrips.filter(t => t.archived);
   const trip = allTrips.find(t => t.trip_id === activeTripId) || null;
 
   let html = '<div class="tabs">';
@@ -2140,6 +2217,9 @@ function render() {
     expenseFilter.category = e.target.value === '__all__' ? '' : e.target.value;
     render();
   });
+
+  // Drag-to-reorder trips
+  initTripDragSort();
 
   // Drag-to-reorder thành viên
   initMemberDragSort();
@@ -2967,6 +3047,18 @@ window.app = {
     }
   },
 
+  switchWorkspace() {
+    if (!confirm(appLang === 'vi' ? 'Bạn chắc muốn đổi workspace? Dữ liệu hiện tại sẽ không bị xóa.' : 'Are you sure you want to switch workspace? Current data will not be deleted.')) {
+      return;
+    }
+    // Clear current workspace
+    WORKSPACE_ID = null;
+    activeTripId = null;
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    // Show workspace setup screen
+    renderWorkspaceSetup();
+  },
+
   openMemberDetail(memberName) {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     if (!trip) return;
@@ -3254,6 +3346,10 @@ function startApp(workspaceId) {
   url.searchParams.set('ws', workspaceId);
   window.history.replaceState({}, '', url);
 
+  // Load custom trip order from localStorage
+  const savedOrder = localStorage.getItem(`tripOrder_${workspaceId}`);
+  tripOrder = savedOrder ? JSON.parse(savedOrder) : [];
+
   document.getElementById('app').innerHTML = '';
   
   // 🚀 OPTIMIZATION: Load cached data immediately, then fetch fresh
@@ -3262,6 +3358,15 @@ function startApp(workspaceId) {
       // Show cached data immediately
       rawTrips = cachedData.trips;
       rawExpenses = cachedData.expenses || [];
+      
+      // Auto-select first active trip
+      if (!activeTripId) {
+        const activeTrip = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
+        if (activeTrip) {
+          activeTripId = activeTrip.trip_id;
+        }
+      }
+      
       isLoading = false;
       render();
     }
