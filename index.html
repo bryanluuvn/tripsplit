@@ -3359,9 +3359,10 @@ function startApp(workspaceId) {
       rawTrips = cachedData.trips;
       rawExpenses = cachedData.expenses || [];
       
-      // Auto-select first active trip
+      // Auto-select first ACTIVE trip theo drag-drop order (Option A)
       if (!activeTripId) {
-        const activeTrip = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
+        const sortedTrips = getSortedTrips(rawTrips);
+        const activeTrip = sortedTrips.find(t => !(t.archived === 'true' || t.archived === true));
         if (activeTrip) {
           activeTripId = activeTrip.trip_id;
         }
