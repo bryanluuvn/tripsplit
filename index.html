@@ -1726,26 +1726,30 @@ function getTripObjects() {
   }));
 }
 
-// Sort trips by custom order (tripOrder array)
+// Sort trips by custom order (tripOrder array) + newest first as default
 function getSortedTrips(trips) {
-  if (tripOrder.length === 0) return trips;
+  // First: sort by newest (reverse order from Sheet - last added = newest)
+  const newestFirst = [...trips].reverse();
   
-  // Put trips in tripOrder sequence first, then append any new trips not in order
-  const sorted = [];
-  const remaining = new Set(trips.map(t => t.trip_id));
+  // If no custom order yet, return newest first
+  if (tripOrder.length === 0) return newestFirst;
   
+  // Apply custom drag-drop order, but keep new trips at top
+  const customOrdered = [];
+  const remaining = new Set(newestFirst.map(t => t.trip_id));
+  
+  // Add trips in custom order
   for (const id of tripOrder) {
-    const trip = trips.find(t => t.trip_id === id);
+    const trip = newestFirst.find(t => t.trip_id === id);
     if (trip) {
-      sorted.push(trip);
+      customOrdered.push(trip);
       remaining.delete(id);
     }
   }
   
-  // Append remaining trips
-  sorted.push(...trips.filter(t => remaining.has(t.trip_id)));
-  
-  return sorted;
+  // Append new trips (not in custom order) at the top
+  const newTrips = newestFirst.filter(t => remaining.has(t.trip_id));
+  return [...newTrips, ...customOrdered];
 }
 function getExpensesForTrip(trip) {
   return rawExpenses
