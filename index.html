@@ -590,6 +590,7 @@ const APP_TRANSLATIONS = {
     share_desc: 'Chia sẻ link này để mời bạn bè tham gia',
     share_copy_btn: 'Sao chép link',
     share_copied: 'Đã sao chép!',
+    workspace_summary: 'Tất cả Trip',
     load_error_prefix: 'Không tải được dữ liệu:',
     retry_btn: 'Thử lại',
     api_not_configured: 'Chưa cấu hình API_URL. Mở file index.html, dán link Google Apps Script Web App vào biến API_URL ở đầu phần &lt;script&gt;.',
@@ -817,6 +818,7 @@ const APP_TRANSLATIONS = {
     share_desc: 'Share this link to invite friends to join',
     share_copy_btn: 'Copy link',
     share_copied: 'Copied!',
+    workspace_summary: 'All Trips',
     load_error_prefix: 'Could not load data:',
     retry_btn: 'Retry',
     api_not_configured: 'API_URL is not configured yet. Open index.html and paste your Google Apps Script Web App link into the API_URL variable near the top of the &lt;script&gt; section.',
@@ -1385,10 +1387,18 @@ function computeBalances(members, expenses) {
   expenses.forEach(exp => {
     const amt = exp.amountVND ?? exp.amount;
     balances[exp.paidBy] = (balances[exp.paidBy] || 0) + amt;
-    // Khoản góp quỹ (category 'fund') chỉ cộng cho người góp, không chia/trừ cho ai -
-    // đây là tiền "nạp vào ví chung", khác với chi tiêu thường phải chia đều.
+    // Khoản góp quỹ (category 'fund') chỉ cộng cho người góp, không chia/trừ cho ai
     if (exp.category === 'fund') return;
-    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
+    
+    // CRITICAL: ensure splitWith is an array
+    let splitMembers = exp.splitWith;
+    if (!Array.isArray(splitMembers)) {
+      splitMembers = parseMembers(splitMembers) || members;
+    }
+    if (!splitMembers || splitMembers.length === 0) {
+      splitMembers = members;
+    }
+    
     const share = amt / splitMembers.length;
     splitMembers.forEach(m => { balances[m] = (balances[m] || 0) - share; });
   });
@@ -1404,7 +1414,16 @@ function computeUsage(members, expenses) {
   expenses.forEach(exp => {
     if (isNonSpending(exp.category)) return;
     const amt = exp.amountVND ?? exp.amount;
-    const splitMembers = exp.splitWith.length > 0 ? exp.splitWith : members;
+    
+    // CRITICAL: ensure splitWith is an array
+    let splitMembers = exp.splitWith;
+    if (!Array.isArray(splitMembers)) {
+      splitMembers = parseMembers(splitMembers) || members;
+    }
+    if (!splitMembers || splitMembers.length === 0) {
+      splitMembers = members;
+    }
+    
     const share = amt / splitMembers.length;
     splitMembers.forEach(m => { usage[m] = (usage[m] || 0) + share; });
   });
@@ -1721,7 +1740,7 @@ function getTripObjects() {
     members: parseMembers(t.members),
     archived: t.archived === 'true' || t.archived === true,
     foreignCurrency: t.foreign_currency || '',
-    exchangeRate: t.exchange_rate || '',
+    exchangeRate: parseFloat(t.exchange_rate) || 1,  // ← Default to 1!
     homeCurrency: t.home_currency || 'VND',
   }));
 }
@@ -1759,8 +1778,17 @@ function getExpensesForTrip(trip) {
       const amount = Number(e.amount);
       const hc = trip.homeCurrency || 'VND';
       // rate: how many home-currency units = 1 foreign unit
-      const rate = currency ? (parseFloat(trip.exchangeRate) || 0) : 1;
+      // Handle both: trip.exchangeRate (getTripObjects) and trip.exchange_rate (rawTrips)
+      const rate = currency ? (parseFloat(trip.exchangeRate || trip.exchange_rate) || 1) : 1;
       const amountHome = currency ? amount * rate : amount;
+      
+      let splitWith = parseMembers(e.split_with);
+      
+      // FALLBACK: If splitWith empty and not a fund contribution, use all trip members
+      if ((!splitWith || splitWith.length === 0) && e.category !== 'fund') {
+        splitWith = trip.members || [];
+      }
+      
       return {
         id: e.expense_id,
         paidBy: e.paid_by,
@@ -1769,7 +1797,7 @@ function getExpensesForTrip(trip) {
         amountHome,          // in home currency
         amountVND: amountHome, // legacy alias
         desc: e.desc,
-        splitWith: parseMembers(e.split_with),
+        splitWith: splitWith,
         date: e.date,
         time: e.time || '',
         category: e.category || '',
@@ -1972,6 +2000,165 @@ function initTripDragSort() {
   });
 }
 
+// Compute workspace-level settlements (across all trips)
+// FIX: Aggregate trip settlements directly instead of recalculating from scratch
+function getWorkspaceSettlements() {
+  const activeTrips = getTripObjects().filter(t => !t.archived);
+    console.log('[WS] Active trips:', activeTrips.length);
+    
+    if (activeTrips.length === 0) {
+      return {
+        members: [],
+        settlements: [],
+        homeCurrency: 'VND',
+        totalSpent: 0
+      };
+    }
+    
+    // Get all members from active trips (auto-detect via getExpensesForTrip fallback)
+    const allMembers = new Set();
+    activeTrips.forEach(trip => {
+      console.log(`[WS] Processing trip: ${trip.name}, members:`, trip.members);
+      
+      if (!trip.members || trip.members.length === 0) {
+        // Auto-detect from expenses
+        const expenses = getExpensesForTrip(trip);
+        console.log(`[WS] ${trip.name} auto-detect: ${expenses.length} expenses`);
+        
+        const membersSet = new Set();
+        expenses.forEach(e => {
+          if (e.paidBy) membersSet.add(e.paidBy);
+          if (e.splitWith && e.splitWith.length > 0) {
+            e.splitWith.forEach(m => membersSet.add(m));
+          }
+        });
+        
+        trip.members = [...membersSet];
+        console.log(`[WS] ${trip.name} detected members:`, trip.members);
+      }
+      
+      trip.members.forEach(m => allMembers.add(m));
+    });
+  
+  // Aggregate settlements from all trips (sum, don't recalculate)
+  const settlementMap = {}; // "from→to" → amount
+  
+  activeTrips.forEach(trip => {
+    const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+    const tripExpenses = getExpensesForTrip(tripObj);
+    const rawBalances = computeBalances(trip.members, tripExpenses);
+    const tripSettlements = simplifyDebts(rawBalances, trip.homeCurrency);
+    
+    // Aggregate: sum amounts for same (from→to) pairs
+    tripSettlements.forEach(s => {
+      const key = `${s.from}→${s.to}`;
+      settlementMap[key] = (settlementMap[key] || 0) + s.amount;
+    });
+  });
+  
+  // Convert to array
+  let settlements = Object.entries(settlementMap)
+    .map(([key, amount]) => {
+      const [from, to] = key.split('→');
+      return { from, to, amount };
+    })
+    .filter(s => s.amount > 0.01);
+  
+  // CRITICAL FIX: Merge bidirectional debts ONLY (not recalculate)
+  // E.g., if both Phong→Bành 392 AND Bành→Phong 1454 exist
+  // Merge to: Bành→Phong 1062 (1454 - 392)
+  const merged = {};
+  const processed = new Set();
+  
+  settlements.forEach(s => {
+    if (processed.has(`${s.from}→${s.to}`)) return;
+    
+    // Check for reverse settlement
+    const reverse = settlements.find(r => 
+      r.from === s.to && r.to === s.from && !processed.has(`${r.from}→${r.to}`)
+    );
+    
+    if (reverse) {
+      // Merge bidirectional
+      const net = s.amount - reverse.amount;
+      if (net > 0.01) {
+        merged[`${s.from}→${s.to}`] = net;
+      } else if (net < -0.01) {
+        merged[`${s.to}→${s.from}`] = Math.abs(net);
+      }
+      processed.add(`${s.from}→${s.to}`);
+      processed.add(`${s.to}→${s.from}`);
+    } else {
+      // No reverse, keep as is
+      merged[`${s.from}→${s.to}`] = s.amount;
+      processed.add(`${s.from}→${s.to}`);
+    }
+  });
+  
+  // Convert merged back to array (base settlements, no optimization)
+  const baseSettlements = Object.entries(merged)
+    .map(([key, amount]) => {
+      const [from, to] = key.split('→');
+      return { from, to, amount };
+    })
+    .filter(s => s.amount > 0.01);
+  
+  // Get total spent
+  let totalSpent = 0;
+  activeTrips.forEach(trip => {
+    const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+    const expenses = getExpensesForTrip(tripObj);
+    expenses.forEach(e => {
+      if (e.category !== 'payment') {
+        totalSpent += e.amountHome;
+      }
+    });
+  });
+  
+  // Get homeCurrency from first trip
+  const homeCurrency = activeTrips.length > 0 ? activeTrips[0].homeCurrency : 'VND';
+  
+  return {
+    members: [...allMembers],
+    settlements: baseSettlements,
+    homeCurrency,
+    totalSpent
+  };
+}
+
+// Get settlement details for workspace settling dialog
+function getWorkspaceSettlementDetails(fromMember, toMember, amount) {
+  const result = [];
+  
+  // Find all relevant settlements across trips
+  getTripObjects().forEach(trip => {
+    if (trip.archived) return;
+    
+    // Get raw trip to use with getExpensesForTrip
+    const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+    if (!tripObj) return;
+    
+    const tripExpenses = getExpensesForTrip(tripObj);
+    const rawBalances = computeBalances(trip.members, tripExpenses);
+    const settlements = simplifyDebts(rawBalances, trip.homeCurrency);
+    
+    const relevant = settlements.find(s => 
+      s.from === fromMember && s.to === toMember
+    );
+    
+    if (relevant && relevant.amount > 0.01) {
+      result.push({
+        tripId: trip.trip_id,
+        tripName: trip.name,
+        amount: relevant.amount,
+        homeCurrency: trip.homeCurrency
+      });
+    }
+  });
+  
+  return result;
+}
+
 function render() {
   const app = document.getElementById('app');
   // Update lang toggle button
@@ -2005,7 +2192,12 @@ function render() {
   activeTrips.forEach(t => {
     html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
   });
-  html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div></div>`;
+  html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div>`;
+  
+  // NEW: Add "All Trips" tab at the end
+  html += `<div class="tab ${activeTripId === 'WORKSPACE' ? 'active' : ''}" data-action="selectTrip" data-id="WORKSPACE" style="margin-left:auto;">📊 ${t('workspace_summary') || 'All Trips'}</div>`;
+  
+  html += `</div>`;
 
   if (archivedTrips.length > 0) {
     html += `<div style="margin-bottom:1.1rem;">
@@ -2029,7 +2221,250 @@ function render() {
     html += `<p class="empty">${t('no_trip')}</p>`;
   }
 
-  if (trip) {
+  // Handle Workspace Summary view
+  if (activeTripId === 'WORKSPACE' && allTrips.length > 0) {
+    const ws = getWorkspaceSettlements();
+    
+    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
+      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">📊 ${t('workspace_summary') || 'All Trips'}</h2>
+    </div>`;
+
+    html += `<div class="card">
+      <div class="card-head">
+        <span class="card-title">${appLang === 'vi' ? 'Tổng hợp chi tiêu' : 'Per-Person Overview'}</span>
+      </div>
+      <div class="card-body">`;
+    
+    // Helper: get per-person summary for a single trip
+    function getTripPersonSummary(trip) {
+      const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+      const expenses = getExpensesForTrip(tripObj);
+      const summary = {};
+      
+      // Get correct balances for this trip
+      const balances = computeBalances(trip.members, expenses);
+      
+      // For each member in this trip
+      trip.members.forEach(member => {
+        let paid = 0;
+        let paymentReceived = 0;  // Payments received from others
+        let paymentMade = 0;      // Payments made to others
+        
+        // How much they paid (INCLUDING payments)
+        expenses.forEach(e => {
+          // Include both regular expenses and payments in Paid
+          if (e.paidBy === member) {
+            paid += e.amountHome;
+          }
+          
+          // Track payments separately for balance adjustment
+          if (e.category === 'payment') {
+            if (e.paidBy === member) {
+              // They made a payment (already counted in paid above)
+              paymentMade += e.amountHome;
+            } else if (e.split_with && (e.split_with === member || (Array.isArray(e.split_with) && e.split_with.includes(member)))) {
+              // They received a payment
+              paymentReceived += e.amountHome;
+            }
+          }
+        });
+        
+        // Get their balance from computeBalances
+        let balance = balances[member] || 0;
+        
+        // Adjust balance for payments
+        // If they made a payment, they owe less
+        balance += paymentMade;
+        // If they received a payment, they owe more
+        balance -= paymentReceived;
+        
+        // Used = Paid - Balance
+        const used = paid - balance;
+        
+        summary[member] = { paid, used, balance };
+      });
+      
+      return summary;
+    }
+    
+    // Calculate per-person summary using SAME logic as individual trips
+    const allMembers = new Set(ws.members);
+    
+    // Aggregate ALL expenses from ALL trips
+    const allExpenses = [];
+    activeTrips.forEach(trip => {
+      const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+      if (tripObj) {
+        const tripExpenses = getExpensesForTrip(tripObj);
+        allExpenses.push(...tripExpenses);
+      }
+    });
+    
+    // Use EXACT same calculation as individual trips
+    const workspacePaid = computePaid([...allMembers], allExpenses);
+    const workspaceUsage = computeUsage([...allMembers], allExpenses);
+    const workspaceBalances = computeBalances([...allMembers], allExpenses);
+    
+    // Build per-person summary
+    const personSummary = [];
+    [...allMembers].forEach(member => {
+      const paid = workspacePaid[member] || 0;
+      const used = workspaceUsage[member] || 0;
+      const balance = workspaceBalances[member] || 0;
+      const status = balance > 0.01 ? 'receive' : (balance < -0.01 ? 'owe' : 'settled');
+      
+      personSummary.push({
+        name: member,
+        paid: paid,
+        used: used,
+        balance: balance,
+        status: status
+      });
+    });
+    
+    // Sort by balance (highest first)
+    personSummary.sort((a, b) => b.balance - a.balance);
+    
+    // Render table with better responsive layout
+    html += `<div style="overflow-x:auto;">
+      <div style="display:grid; grid-template-columns:1fr 110px 110px 140px; gap:10px; margin-bottom:12px; font-size:11px; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); padding-bottom:8px; padding-right:4px;">
+        <div>${appLang === 'vi' ? 'Thành viên' : 'Member'}</div>
+        <div style="text-align:right;">${appLang === 'vi' ? 'Đã trả' : 'Paid'}</div>
+        <div style="text-align:right;">${appLang === 'vi' ? 'Đã dùng' : 'Used'}</div>
+        <div style="text-align:right;">${appLang === 'vi' ? 'Số dư' : 'Balance'}</div>
+      </div>`;
+    
+    // Render rows
+    personSummary.forEach(p => {
+      const statusText = p.status === 'receive' ? (appLang === 'vi' ? 'sẽ nhận' : 'receive') :
+                         p.status === 'owe' ? (appLang === 'vi' ? 'còn nợ' : 'owes') :
+                         (appLang === 'vi' ? 'đã thanh toán' : 'settled');
+      const statusColor = p.status === 'receive' ? 'var(--accent-text)' : 
+                          p.status === 'owe' ? '#EF4444' : '#22C55E';
+      
+      html += `<div style="display:grid; grid-template-columns:1fr 110px 110px 140px; gap:10px; align-items:center; padding:8px; background:var(--surface-2); border-radius:var(--radius-sm); margin-bottom:6px;">
+        <div style="font-weight:500; font-size:13px;">${escapeHtml(p.name)}</div>
+        <div style="text-align:right; font-size:12px;">${Math.round(p.paid).toLocaleString(numLocale())}</div>
+        <div style="text-align:right; font-size:12px;">${Math.round(p.used).toLocaleString(numLocale())}</div>
+        <div style="text-align:right; font-weight:500; font-size:12px; color:${statusColor};">
+          ${p.balance > 0 ? '+' : ''}${Math.round(Math.abs(p.balance)).toLocaleString(numLocale())}<br><span style="font-size:10px; font-weight:normal; color:var(--text-secondary); display:block; margin-top:2px;">${statusText}</span>
+        </div>
+      </div>`;
+    });
+    
+    html += `</div>`;
+    
+    html += `</div></div>`;
+    
+    // Settlement
+    if (ws.settlements.length > 0) {
+      html += `<div class="card">
+        <div class="card-head">
+          <span class="card-title">${t('settlement_title')}</span>
+        </div>
+        <div class="card-body">`;
+      
+      ws.settlements.forEach(s => {
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--surface-2); border-radius:var(--radius-sm); margin-bottom:8px;">
+          <span style="font-size:13.5px;">
+            <strong>${escapeHtml(s.from)}</strong> → <strong>${escapeHtml(s.to)}</strong>: 
+            <span style="color:var(--accent-text); font-weight:600;">${s.amount.toLocaleString(numLocale())} ${ws.homeCurrency}</span>
+          </span>
+          <button class="primary" style="padding:6px 12px; font-size:12px;" data-action="openWorkspaceSettleDialog" data-from="${escapeHtml(s.from)}" data-to="${escapeHtml(s.to)}" data-amount="${s.amount}">
+            ${appLang === 'vi' ? 'Thanh toán' : 'Pay'}
+          </button>
+        </div>`;
+      });
+      
+      // Add "Pay All" button
+      if (ws.settlements.length > 0) {
+        html += `<div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+          <button class="primary" style="width:100%; padding:10px; font-size:13px; font-weight:500;" onclick="window.app.payAllWorkspaceSettlements()">
+            ${appLang === 'vi' ? '✓ Thanh toán tất cả' : '✓ Pay All'}
+          </button>
+        </div>`;
+      }
+      
+      html += `</div></div>`;
+      
+      // OPTIMIZED SETTLEMENTS (for manual transfer outside app)
+      let optimizedList = JSON.parse(JSON.stringify(ws.settlements));
+      let hasOptimization = true;
+      
+      while (hasOptimization) {
+        hasOptimization = false;
+        
+        for (let i = 0; i < optimizedList.length; i++) {
+          for (let j = 0; j < optimizedList.length; j++) {
+            if (i === j) continue;
+            
+            const s1 = optimizedList[i];
+            const s2 = optimizedList[j];
+            
+            if (s1.to === s2.from) {
+              const amt1 = s1.amount;
+              const amt2 = s2.amount;
+              
+              // Reduce s2
+              s2.amount = amt2 - amt1;
+              
+              // Find or create s1.from → s2.to
+              let existing = optimizedList.find(s => s.from === s1.from && s.to === s2.to);
+              if (existing) {
+                existing.amount += amt1;
+              } else {
+                optimizedList.push({ from: s1.from, to: s2.to, amount: amt1 });
+              }
+              
+              // Remove s1 and s2 (if near-zero) — splice larger index first!
+              const removeIdx = [i, j].filter(idx => idx === j && s2.amount < 0.01).sort((a,b) => b-a);
+              for (let idx of removeIdx) {
+                optimizedList.splice(idx, 1);
+              }
+              if (!removeIdx.includes(i)) {
+                optimizedList.splice(i, 1);
+              }
+              
+              hasOptimization = true;
+              break;
+            }
+          }
+          if (hasOptimization) break;
+        }
+      }
+      
+      optimizedList = optimizedList.filter(s => s.amount > 0.01);
+      
+      // Show optimized settlements if different
+      if (optimizedList.length < ws.settlements.length) {
+        html += `<div class="card" style="margin-top:12px; background:var(--surface-1); border:1px solid var(--surface-3);">
+          <div class="card-head">
+            <span class="card-title" style="font-size:13px;">💡 ${appLang === 'vi' ? 'Cách chuyển tiền tối ưu (manual)' : 'Optimized Transfer (Manual)'}</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px; margin-top:0;">
+              ${appLang === 'vi' ? 'Nếu chuyển tiền bên ngoài app, dùng cách này để giảm số giao dịch:' : 'For transfers outside app, use this to reduce transactions:'}
+            </p>`;
+        
+        optimizedList.forEach(s => {
+          html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:var(--surface-2); border-radius:var(--radius-sm); margin-bottom:6px; font-size:12.5px;">
+            <span>
+              <strong>${escapeHtml(s.from)}</strong> → <strong>${escapeHtml(s.to)}</strong>: 
+              <span style="color:var(--accent-text); font-weight:600;">${s.amount.toLocaleString(numLocale())} ${ws.homeCurrency}</span>
+            </span>
+          </div>`;
+        });
+        
+        html += `<p style="font-size:11px; color:var(--text-secondary); margin-top:10px; margin-bottom:0;">
+          ✓ ${appLang === 'vi' ? 'Giảm từ ' + ws.settlements.length + ' xuống ' + optimizedList.length + ' giao dịch' : 'Reduced from ' + ws.settlements.length + ' to ' + optimizedList.length + ' transactions'}
+        </p>
+          </div>
+        </div>`;
+      }
+    } else {
+      html += `<p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>`;
+    }
+  } else if (trip) {
     const expenses = getExpensesForTrip(trip);
 
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
@@ -2195,6 +2630,15 @@ function render() {
               title="${t('mark_settled_title')}">✓</button>
           </div>`;
         });
+        
+        // Add "Settle All" button
+        if (settlements.length > 0) {
+          html += `<div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+            <button class="primary" style="width:100%; padding:10px; font-size:13px; font-weight:500;" onclick="window.app.settleAllTrip('${escapeHtml(activeTripId)}')">
+              ${appLang === 'vi' ? '✓ Thanh toán tất cả' : '✓ Settle All'}
+            </button>
+          </div>`;
+        }
       }
       html += `</div>`;
     }
@@ -2297,6 +2741,56 @@ function handleAction(e) {
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
 
+  if (action === 'openWorkspaceSettleDialog') {
+    const from = e.currentTarget.dataset.from;
+    const to = e.currentTarget.dataset.to;
+    const totalAmount = parseFloat(e.currentTarget.dataset.amount);
+    
+    // Get settlement details for this pair across trips
+    const details = getWorkspaceSettlementDetails(from, to, totalAmount);
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'settleDialogOverlay';
+    overlay.className = 'modal-overlay';
+    
+    let detailsHtml = details.map((d, idx) => `
+      <div style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
+        <input type="number" id="settle_trip_${idx}" value="${d.amount}" 
+               style="flex:1; padding:8px; border:1px solid var(--border); border-radius:var(--radius-sm);">
+        <span style="font-size:13px; min-width:120px;">${escapeHtml(d.tripName)}</span>
+      </div>
+    `).join('');
+    
+    overlay.innerHTML = `<div class="modal" style="max-width:450px;">
+      <h2 style="margin-bottom:12px;">${appLang === 'vi' ? 'Thanh toán' : 'Settlement'}</h2>
+      
+      <p style="font-size:13.5px; margin-bottom:14px;">
+        ${escapeHtml(from)} → ${escapeHtml(to)}: <strong>${totalAmount.toLocaleString(numLocale())}</strong>
+      </p>
+      
+      <p style="font-size:13px; color:var(--text-secondary); margin-bottom:10px;">
+        ${appLang === 'vi' ? 'Phân chia thanh toán:' : 'Distribution:'}
+      </p>
+      
+      <div style="background:var(--surface-2); padding:12px; border-radius:var(--radius-sm); margin-bottom:16px;">
+        ${detailsHtml}
+      </div>
+      
+      <div class="row" style="gap:8px; justify-content:flex-end;">
+        <button onclick="document.getElementById('settleDialogOverlay').remove();" style="padding:10px 16px;">
+          ${appLang === 'vi' ? 'Hủy' : 'Cancel'}
+        </button>
+        <button class="primary" onclick="window.app.confirmWorkspaceSettle('${escapeHtml(from)}', '${escapeHtml(to)}', ${details.length})" style="padding:10px 16px;">
+          ${appLang === 'vi' ? 'Xác nhận' : 'Confirm'}
+        </button>
+      </div>
+    </div>`;
+    
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    return;
+  }
+
   if (action === 'markSettled') {
     const from = e.currentTarget.dataset.from;
     const to = e.currentTarget.dataset.to;
@@ -2321,6 +2815,7 @@ function handleAction(e) {
     showToast(`${from} → ${to}: ${fmtHome(amount, currentHomeCurrency())}`);
     return;
   }
+  
   if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
@@ -3153,6 +3648,157 @@ window.app = {
   closeMemberDetail() {
     const overlay = document.getElementById('memberDetailOverlay');
     if (overlay) overlay.remove();
+  },
+
+  confirmWorkspaceSettle(from, to, tripCount) {
+    const details = getWorkspaceSettlementDetails(from, to, 0);
+    const now = new Date();
+    let anyAdded = false;
+    
+    // Read user inputs from dialog and create payments
+    details.forEach((d, idx) => {
+      const input = document.getElementById(`settle_trip_${idx}`);
+      if (!input) return;
+      
+      const amount = parseFloat(input.value);
+      if (amount <= 0) return;
+      
+      // Create payment transaction for this trip
+      const expenseData = {
+        expense_id: uid(),
+        trip_id: d.tripId,
+        paid_by: from,
+        amount,
+        currency: '',
+        desc: `${t('auto_payment_desc_prefix')} ${to}`,
+        split_with: to, // Just the recipient name
+        date: now.toISOString().slice(0, 10),
+        time: nowTimeStr(),
+        category: 'payment',
+      };
+      
+      // Add locally
+      rawExpenses.push({ ...expenseData });
+      anyAdded = true;
+    });
+    
+    if (!anyAdded) {
+      showToast(appLang === 'vi' ? 'Không có khoản thanh toán nào' : 'No payments to create');
+      document.getElementById('settleDialogOverlay')?.remove();
+      return;
+    }
+    
+    // Save offline + refresh UI
+    saveOffline(rawTrips, rawExpenses);
+    document.getElementById('settleDialogOverlay')?.remove();
+    showToast(`${from} → ${to}: ${appLang === 'vi' ? 'Đã tạo thanh toán' : 'Payment created'}`);
+    render();
+  },
+
+  payAllWorkspaceSettlements() {
+    const ws = getWorkspaceSettlements();
+    if (!ws.settlements || ws.settlements.length === 0) return;
+    
+    // Confirm dialog
+    if (!confirm(appLang === 'vi' 
+      ? `Thanh toán tất cả ${ws.settlements.length} giao dịch?` 
+      : `Pay all ${ws.settlements.length} settlements?`)) {
+      return;
+    }
+    
+    const now = new Date();
+    let count = 0;
+    
+    // Create and sync each payment like markSettled does
+    ws.settlements.forEach(s => {
+      const details = getWorkspaceSettlementDetails(s.from, s.to, s.amount);
+      
+      details.forEach(d => {
+        if (!d.tripId || d.amount <= 0) return;
+        
+        const expenseData = {
+          expense_id: uid(),
+          trip_id: d.tripId,
+          paid_by: s.from,
+          amount: Math.round(d.amount),
+          currency: '',
+          desc: `${t('auto_payment_desc_prefix')} ${s.to}`,
+          split_with: s.to,
+          date: now.toISOString().slice(0, 10),
+          time: nowTimeStr(),
+          category: 'payment'
+        };
+        
+        // Use withSaving to sync to server (like markSettled)
+        withSaving(
+          () => rawExpenses.push({ ...expenseData }),
+          () => apiPost({ action: 'addExpense', ...expenseData })
+        );
+        count++;
+      });
+    });
+    
+    if (count > 0) {
+      showToast(appLang === 'vi' 
+        ? `✓ Đã tạo ${count} thanh toán` 
+        : `✓ Created ${count} payments`);
+    }
+  },
+
+  settleAllTrip(tripId) {
+    const trip = rawTrips.find(t => t.trip_id === tripId);
+    if (!trip) return;
+    
+    const tripObj = getTripObjects().find(t => t.trip_id === tripId);
+    if (!tripObj) return;
+    
+    const expenses = getExpensesForTrip(trip);
+    
+    // Calculate settlements like individual trip does
+    const rawBalances = computeBalances(tripObj.members, expenses);
+    const { peopleBalances } = splitCashFundBalance(rawBalances);
+    const settlements = simplifyDebts(peopleBalances, tripObj.homeCurrency);
+    
+    if (!settlements || settlements.length === 0) return;
+    
+    // Confirm dialog
+    if (!confirm(appLang === 'vi' 
+      ? `Thanh toán tất cả ${settlements.length} giao dịch?` 
+      : `Pay all ${settlements.length} settlements?`)) {
+      return;
+    }
+    
+    const now = new Date();
+    let count = 0;
+    
+    // Create and sync each payment - EXACT same logic as All Trips
+    settlements.forEach(s => {
+      const expenseData = {
+        expense_id: uid(),
+        trip_id: tripId,
+        paid_by: s.from,
+        amount: Math.round(s.amount),
+        currency: '',
+        desc: `${t('auto_payment_desc_prefix')} ${s.to}`,
+        split_with: s.to,
+        date: now.toISOString().slice(0, 10),
+        time: nowTimeStr(),
+        category: 'payment'
+      };
+      
+      // Use withSaving to sync to server (like markSettled & All Trips)
+      withSaving(
+        () => rawExpenses.push({ ...expenseData }),
+        () => apiPost({ action: 'addExpense', ...expenseData })
+      );
+      count++;
+    });
+    
+    if (count > 0) {
+      showToast(appLang === 'vi' 
+        ? `✓ Đã tạo ${count} thanh toán` 
+        : `✓ Created ${count} payments`);
+    }
   },
 
   addMember() {
