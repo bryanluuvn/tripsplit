@@ -606,6 +606,7 @@ const APP_TRANSLATIONS = {
     csv_col_category: 'Loại',
     csv_col_payer: 'Người trả',
     csv_col_desc: 'Mô tả',
+    csv_col_receipt: 'Link hóa đơn',
     img_overview_title: 'TỔNG QUAN TỪNG NGƯỜI',
     img_cash_fund_title: 'QUỸ TIỀN MẶT CHUNG',
     img_settlement_title: 'KẾT QUẢ THANH TOÁN',
@@ -840,6 +841,7 @@ const APP_TRANSLATIONS = {
     csv_col_category: 'Category',
     csv_col_payer: 'Payer',
     csv_col_desc: 'Description',
+    csv_col_receipt: 'Receipt link',
     img_overview_title: 'OVERVIEW PER PERSON',
     img_cash_fund_title: 'SHARED CASH FUND',
     img_settlement_title: 'SETTLEMENT RESULT',
@@ -3028,6 +3030,7 @@ function handleAction(e) {
       t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
       t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${trip.homeCurrency || 'VND'})`, t('export_col_split'),
       ...members.map(m => `${t('export_member_share_prefix')} ${m} (${trip.homeCurrency || 'VND'})`),
+      t('csv_col_receipt'),
     ]);
     expenses.slice().reverse().forEach(ex => {
       const isFund = ex.category === 'fund';
@@ -3043,6 +3046,7 @@ function handleAction(e) {
         ex.desc || '', ex.amount, ex.currency || (trip.homeCurrency || 'VND'), roundCurrency(ex.amountVND, trip.homeCurrency),
         isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
         ...memberShares,
+        ex.receiptUrl || '',
       ]);
     });
 
