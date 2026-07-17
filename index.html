@@ -2440,32 +2440,40 @@ function render() {
           for (let j = 0; j < optimizedList.length; j++) {
             if (i === j) continue;
             
-            const s1 = optimizedList[i];
-            const s2 = optimizedList[j];
+            const s1 = optimizedList[i]; // A -> B
+            const s2 = optimizedList[j]; // B -> C
             
-            if (s1.to === s2.from) {
+            if (s1.to === s2.from && s1.from !== s2.to) {
               const amt1 = s1.amount;
               const amt2 = s2.amount;
+              // Chỉ khử được phần trùng nhau giữa 2 cạnh (A->B và B->C).
+              // Phần dư (nếu amt1 !== amt2) vẫn phải giữ lại làm 1 giao dịch riêng,
+              // nếu không sẽ làm "mất" số tiền người ở giữa (B) đáng lẽ được nhận/phải trả.
+              const passThrough = Math.min(amt1, amt2);
               
-              // Reduce s2
-              s2.amount = amt2 - amt1;
-              
-              // Find or create s1.from → s2.to
+              // A -> C nhận phần khử được
               let existing = optimizedList.find(s => s.from === s1.from && s.to === s2.to);
               if (existing) {
-                existing.amount += amt1;
+                existing.amount += passThrough;
               } else {
-                optimizedList.push({ from: s1.from, to: s2.to, amount: amt1 });
+                optimizedList.push({ from: s1.from, to: s2.to, amount: passThrough });
               }
               
-              // Remove s1 and s2 (if near-zero) — splice larger index first!
-              const removeIdx = [i, j].filter(idx => idx === j && s2.amount < 0.01).sort((a,b) => b-a);
-              for (let idx of removeIdx) {
-                optimizedList.splice(idx, 1);
+              const removeIdx = [];
+              if (amt1 > amt2 + 0.01) {
+                // A vẫn còn nợ B phần dư
+                s1.amount = amt1 - amt2;
+                removeIdx.push(j);
+              } else if (amt2 > amt1 + 0.01) {
+                // B vẫn còn nợ C phần dư
+                s2.amount = amt2 - amt1;
+                removeIdx.push(i);
+              } else {
+                // Bằng nhau: khử hết cả 2 cạnh gốc
+                removeIdx.push(i, j);
               }
-              if (!removeIdx.includes(i)) {
-                optimizedList.splice(i, 1);
-              }
+              // Splice theo thứ tự index giảm dần để không lệch vị trí
+              removeIdx.sort((a, b) => b - a).forEach(idx => optimizedList.splice(idx, 1));
               
               hasOptimization = true;
               break;
