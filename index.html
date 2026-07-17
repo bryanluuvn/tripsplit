@@ -585,6 +585,22 @@ const APP_TRANSLATIONS = {
     remove_receipt_aria: 'Xóa ảnh hóa đơn',
     view_receipt_aria: 'Xem hóa đơn',
     receipt_error: 'Không xử lý được ảnh, thử lại nhé',
+    activity_log_title: 'Lịch sử',
+    activity_log_empty: 'Chưa có hoạt động nào',
+    act_created_trip: 'Tạo chuyến',
+    act_renamed_trip: 'Đổi tên chuyến thành',
+    act_archived_trip: 'Lưu trữ chuyến',
+    act_unarchived_trip: 'Bỏ lưu trữ chuyến',
+    act_deleted_trip: 'Xóa chuyến',
+    act_updated_members: 'Cập nhật thành viên chuyến',
+    act_added_expense: 'Thêm chi tiêu',
+    act_added_payment: 'Ghi nhận thanh toán',
+    act_edited_expense: 'Sửa chi tiêu',
+    act_deleted_expense: 'Xóa chi tiêu',
+    time_just_now: 'vừa xong',
+    time_min_ago: 'phút trước',
+    time_hour_ago: 'giờ trước',
+    time_day_ago: 'ngày trước',
     archived_trips_hide: 'Ẩn trip đã lưu trữ',
     archived_trips_show: 'Xem trip đã lưu trữ',
     sync_ok_title: 'Đã đồng bộ',
@@ -820,6 +836,22 @@ const APP_TRANSLATIONS = {
     remove_receipt_aria: 'Remove receipt',
     view_receipt_aria: 'View receipt',
     receipt_error: 'Could not process the image, please try again',
+    activity_log_title: 'History',
+    activity_log_empty: 'No activity yet',
+    act_created_trip: 'Created trip',
+    act_renamed_trip: 'Renamed trip to',
+    act_archived_trip: 'Archived trip',
+    act_unarchived_trip: 'Unarchived trip',
+    act_deleted_trip: 'Deleted trip',
+    act_updated_members: 'Updated members of trip',
+    act_added_expense: 'Added expense',
+    act_added_payment: 'Recorded a payment',
+    act_edited_expense: 'Edited expense',
+    act_deleted_expense: 'Deleted expense',
+    time_just_now: 'just now',
+    time_min_ago: 'min ago',
+    time_hour_ago: 'hr ago',
+    time_day_ago: 'd ago',
     archived_trips_hide: 'Hide archived trips',
     archived_trips_show: 'Show archived trips',
     sync_ok_title: 'Synced',
@@ -1552,6 +1584,60 @@ function compressReceiptImage(file, maxDim = 1280, quality = 0.7) {
   });
 }
 
+// Đổi timestamp ISO (lưu theo giờ VN) thành chuỗi tương đối kiểu "5 phút trước"
+function formatRelativeTime(isoString) {
+  if (!isoString) return '';
+  const then = new Date(String(isoString).replace(' ', 'T'));
+  if (isNaN(then.getTime())) return '';
+  const diffSec = Math.floor((Date.now() - then.getTime()) / 1000);
+  if (diffSec < 60) return t('time_just_now');
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} ${t('time_min_ago')}`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} ${t('time_hour_ago')}`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 30) return `${diffDay} ${t('time_day_ago')}`;
+  return then.toLocaleDateString(numLocale());
+}
+
+// Dựng icon + câu mô tả (bilingual) cho 1 dòng activity log, từ action_type + meta (JSON)
+function formatActivityEntry(entry) {
+  let meta = {};
+  try { meta = entry.meta ? JSON.parse(entry.meta) : {}; } catch (err) { meta = {}; }
+  const tripName = escapeHtml(meta.tripName || '');
+  const desc = escapeHtml(meta.desc || '');
+  const amountStr = (meta.amount !== undefined && meta.amount !== null && meta.amount !== '')
+    ? `${Number(meta.amount).toLocaleString(numLocale())} ${meta.currency || ''}`.trim()
+    : '';
+
+  switch (entry.action_type) {
+    case 'createTrip':
+      return { icon: '🆕', text: `${t('act_created_trip')} "${tripName}"` };
+    case 'renameTrip':
+      return { icon: '✏️', text: `${t('act_renamed_trip')} "${tripName}"` };
+    case 'archiveTrip':
+      return { icon: '🗄️', text: `${t('act_archived_trip')} "${tripName}"` };
+    case 'unarchiveTrip':
+      return { icon: '↩️', text: `${t('act_unarchived_trip')} "${tripName}"` };
+    case 'deleteTrip':
+      return { icon: '🗑', text: `${t('act_deleted_trip')} "${tripName}"` };
+    case 'updateMembers':
+      return { icon: '👥', text: `${t('act_updated_members')} "${tripName}"` };
+    case 'addExpense':
+      if (meta.category === 'payment') {
+        return { icon: '💸', text: `${t('act_added_payment')}${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+      }
+      return { icon: '🧾', text: `${t('act_added_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+    case 'editExpense':
+      return { icon: '✏️', text: `${t('act_edited_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+    case 'deleteExpense':
+      return { icon: '🗑', text: `${t('act_deleted_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+    default:
+      return { icon: '•', text: escapeHtml(entry.action_type || '') };
+  }
+}
+
+
 // ---- API layer ----
 async function apiGet() {
   const res = await fetch(`${API_URL}?ws=${encodeURIComponent(WORKSPACE_ID)}`);
@@ -1592,8 +1678,8 @@ async function initDB() {
   });
 }
 
-// Save trips and expenses to IndexedDB
-async function saveOffline(trips, expenses) {
+// Save trips, expenses, and activity log to IndexedDB
+async function saveOffline(trips, expenses, activityLog) {
   try {
     const db = await initDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -1603,6 +1689,7 @@ async function saveOffline(trips, expenses) {
         wsId: WORKSPACE_ID,
         trips,
         expenses,
+        activityLog: activityLog || [],
         timestamp: Date.now()
       });
       req.onerror = () => reject(req.error);
@@ -1624,7 +1711,7 @@ async function loadOffline() {
       req.onerror = () => reject(req.error);
       req.onsuccess = () => {
         const data = req.result;
-        resolve(data ? { trips: data.trips || [], expenses: data.expenses || [] } : { trips: [], expenses: [] });
+        resolve(data ? { trips: data.trips || [], expenses: data.expenses || [], activityLog: data.activityLog || [] } : { trips: [], expenses: [], activityLog: [] });
       };
     });
   } catch (err) {
@@ -1639,7 +1726,7 @@ apiGet = async function() {
   try {
     const data = await originalApiGet();
     // Save to offline storage for later use
-    await saveOffline(data.trips || [], data.expenses || []);
+    await saveOffline(data.trips || [], data.expenses || [], data.activityLog || []);
     return data;
   } catch (err) {
     console.warn('[Offline] Network GET failed, loading from cache:', err);
@@ -1717,6 +1804,7 @@ if ('serviceWorker' in navigator) {
 // ---- State ----
 let rawTrips = [];     // raw rows từ Sheet Trips
 let rawExpenses = [];  // raw rows từ Sheet Expenses
+let rawActivityLog = []; // raw rows từ Sheet ActivityLog
 let tripOrder = [];    // Custom trip order (trip_id array) - persisted in localStorage
 let activeTripId = null;
 let modal = null;
@@ -1858,6 +1946,7 @@ async function refreshData(showSpinner) {
     const data = await apiGet();
     rawTrips = data.trips || [];
     rawExpenses = data.expenses || [];
+    rawActivityLog = data.activityLog || [];
     if (!activeTripId && rawTrips.length > 0) {
       const firstActive = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
       activeTripId = firstActive ? firstActive.trip_id : rawTrips[0].trip_id;
@@ -2238,6 +2327,7 @@ function render() {
   
   // NEW: Add "All Trips" tab at the end
   html += `<div class="tab ${activeTripId === 'WORKSPACE' ? 'active' : ''}" data-action="selectTrip" data-id="WORKSPACE" style="margin-left:auto;">📊 ${t('workspace_summary') || 'All Trips'}</div>`;
+  html += `<div class="tab ${activeTripId === 'HISTORY' ? 'active' : ''}" data-action="selectTrip" data-id="HISTORY">📜 ${t('activity_log_title')}</div>`;
   
   html += `</div>`;
 
@@ -2513,6 +2603,29 @@ function render() {
       }
     } else {
       html += `<p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>`;
+    }
+  } else if (activeTripId === 'HISTORY') {
+    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
+      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">📜 ${t('activity_log_title')}</h2>
+    </div>`;
+
+    const logEntries = (rawActivityLog || []).slice().sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+
+    if (logEntries.length === 0) {
+      html += `<p class="empty" style="padding:20px; text-align:center;">${t('activity_log_empty')}</p>`;
+    } else {
+      html += `<div class="card"><div class="card-body" style="padding:4px 0;">`;
+      logEntries.forEach((entry, idx) => {
+        const { icon, text } = formatActivityEntry(entry);
+        html += `<div style="display:flex; align-items:flex-start; gap:10px; padding:9px 14px; ${idx < logEntries.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
+          <span style="font-size:15px; line-height:1.4;">${icon}</span>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:13px; line-height:1.4;">${text}</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${formatRelativeTime(entry.timestamp)}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
     }
   } else if (trip) {
     const expenses = getExpensesForTrip(trip);
@@ -4144,6 +4257,7 @@ function startApp(workspaceId) {
       // Show cached data immediately
       rawTrips = cachedData.trips;
       rawExpenses = cachedData.expenses || [];
+      rawActivityLog = cachedData.activityLog || [];
       
       // Auto-select first ACTIVE trip theo drag-drop order (Option A)
       if (!activeTripId) {
