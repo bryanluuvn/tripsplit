@@ -601,6 +601,14 @@ const APP_TRANSLATIONS = {
     time_min_ago: 'phút trước',
     time_hour_ago: 'giờ trước',
     time_day_ago: 'ngày trước',
+    act_restored_expense: 'Khôi phục chi tiêu',
+    act_restored_trip: 'Khôi phục chuyến',
+    restore_btn: 'Khôi phục',
+    restore_aria: 'Khôi phục',
+    restore_need_trip_first: 'Cần khôi phục chuyến đi trước',
+    restore_already_exists: 'Đã tồn tại, không cần khôi phục nữa',
+    restore_success: 'Đã khôi phục',
+    restore_failed: 'Khôi phục thất bại, thử lại nhé',
     archived_trips_hide: 'Ẩn trip đã lưu trữ',
     archived_trips_show: 'Xem trip đã lưu trữ',
     sync_ok_title: 'Đã đồng bộ',
@@ -852,6 +860,14 @@ const APP_TRANSLATIONS = {
     time_min_ago: 'min ago',
     time_hour_ago: 'hr ago',
     time_day_ago: 'd ago',
+    act_restored_expense: 'Restored expense',
+    act_restored_trip: 'Restored trip',
+    restore_btn: 'Restore',
+    restore_aria: 'Restore',
+    restore_need_trip_first: 'Restore the trip first',
+    restore_already_exists: 'Already exists, no need to restore',
+    restore_success: 'Restored',
+    restore_failed: 'Restore failed, please try again',
     archived_trips_hide: 'Hide archived trips',
     archived_trips_show: 'Show archived trips',
     sync_ok_title: 'Synced',
@@ -1600,7 +1616,8 @@ function formatRelativeTime(isoString) {
   return then.toLocaleDateString(numLocale());
 }
 
-// Dựng icon + câu mô tả (bilingual) cho 1 dòng activity log, từ action_type + meta (JSON)
+// Dựng icon + câu mô tả (bilingual) cho 1 dòng activity log, từ action_type + meta (JSON).
+// Với deleteExpense/deleteTrip có kèm fullData, trả thêm "restore" để hiện nút Khôi phục.
 function formatActivityEntry(entry) {
   let meta = {};
   try { meta = entry.meta ? JSON.parse(entry.meta) : {}; } catch (err) { meta = {}; }
@@ -1620,7 +1637,10 @@ function formatActivityEntry(entry) {
     case 'unarchiveTrip':
       return { icon: '↩️', text: `${t('act_unarchived_trip')} "${tripName}"` };
     case 'deleteTrip':
-      return { icon: '🗑', text: `${t('act_deleted_trip')} "${tripName}"` };
+      return {
+        icon: '🗑', text: `${t('act_deleted_trip')} "${tripName}"`,
+        restore: meta.fullData ? { type: 'trip', data: meta.fullData } : null,
+      };
     case 'updateMembers':
       return { icon: '👥', text: `${t('act_updated_members')} "${tripName}"` };
     case 'addExpense':
@@ -1631,7 +1651,14 @@ function formatActivityEntry(entry) {
     case 'editExpense':
       return { icon: '✏️', text: `${t('act_edited_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
     case 'deleteExpense':
-      return { icon: '🗑', text: `${t('act_deleted_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+      return {
+        icon: '🗑', text: `${t('act_deleted_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})`,
+        restore: meta.fullData ? { type: 'expense', data: meta.fullData } : null,
+      };
+    case 'restoreExpense':
+      return { icon: '↩️', text: `${t('act_restored_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
+    case 'restoreTrip':
+      return { icon: '↩️', text: `${t('act_restored_trip')} "${tripName}"` };
     default:
       return { icon: '•', text: escapeHtml(entry.action_type || '') };
   }
@@ -2616,13 +2643,20 @@ function render() {
     } else {
       html += `<div class="card"><div class="card-body" style="padding:4px 0;">`;
       logEntries.forEach((entry, idx) => {
-        const { icon, text } = formatActivityEntry(entry);
-        html += `<div style="display:flex; align-items:flex-start; gap:10px; padding:9px 14px; ${idx < logEntries.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
+        const { icon, text, restore } = formatActivityEntry(entry);
+        let restoreBtn = '';
+        if (restore) {
+          const payloadAttr = escapeHtml(JSON.stringify(restore.data));
+          const restoreAction = restore.type === 'trip' ? 'restoreTrip' : 'restoreExpense';
+          restoreBtn = `<button class="icon-btn" data-action="${restoreAction}" data-payload="${payloadAttr}" aria-label="${t('restore_aria')}" style="font-size:12px; padding:4px 10px; white-space:nowrap; border:1px solid var(--border-strong); border-radius:var(--radius-sm);">↩️ ${t('restore_btn')}</button>`;
+        }
+        html += `<div style="display:flex; align-items:center; gap:10px; padding:9px 14px; ${idx < logEntries.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
           <span style="font-size:15px; line-height:1.4;">${icon}</span>
           <div style="flex:1; min-width:0;">
             <div style="font-size:13px; line-height:1.4;">${text}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${formatRelativeTime(entry.timestamp)}</div>
           </div>
+          ${restoreBtn}
         </div>`;
       });
       html += `</div></div>`;
@@ -2903,9 +2937,12 @@ function handleAction(e) {
   const name = e.currentTarget.dataset.name;
   const member = e.currentTarget.dataset.member;
   const url = e.currentTarget.dataset.url;
+  const payload = e.currentTarget.dataset.payload;
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
   if (action === 'viewReceipt') { window.app.viewReceipt(url); return; }
+  if (action === 'restoreExpense') { window.app.restoreExpense(payload); return; }
+  if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
 
   if (action === 'openWorkspaceSettleDialog') {
     const from = e.currentTarget.dataset.from;
@@ -3634,6 +3671,43 @@ window.app = {
       </div>`;
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
+  },
+
+  restoreExpense(payloadJson) {
+    let fd;
+    try { fd = JSON.parse(payloadJson); } catch (err) { return; }
+    if (!fd || !fd.expense_id) return;
+    if (rawExpenses.some(e => e.expense_id === fd.expense_id)) {
+      showToast(t('restore_already_exists'));
+      return;
+    }
+    if (!rawTrips.some(tr => tr.trip_id === fd.trip_id)) {
+      showToast(t('restore_need_trip_first'));
+      return;
+    }
+    withSaving(
+      () => { rawExpenses.push({ ...fd }); },
+      () => apiPost({ action: 'restoreExpense', trip_id: fd.trip_id, full_data: fd })
+    );
+  },
+
+  restoreTrip(payloadJson) {
+    let fd;
+    try { fd = JSON.parse(payloadJson); } catch (err) { return; }
+    if (!fd || !fd.trip || !fd.trip.trip_id) return;
+    if (rawTrips.some(tr => tr.trip_id === fd.trip.trip_id)) {
+      showToast(t('restore_already_exists'));
+      return;
+    }
+    withSaving(
+      () => {
+        rawTrips.push({ ...fd.trip });
+        (fd.expenses || []).forEach(ex => {
+          if (!rawExpenses.some(e => e.expense_id === ex.expense_id)) rawExpenses.push({ ...ex });
+        });
+      },
+      () => apiPost({ action: 'restoreTrip', trip_id: fd.trip.trip_id, full_data: fd })
+    );
   },
 
   async manualRefresh() {
