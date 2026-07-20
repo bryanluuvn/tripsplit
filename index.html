@@ -358,12 +358,12 @@
       <h1>Trip Split</h1>
     </div>
     <div class="row" style="gap:10px;">
-      <button class="icon-btn" onclick="window.app.switchWorkspace()" aria-label="Switch workspace / Đổi workspace" title="Switch workspace / Đổi workspace" style="font-size:15px;">🏠</button>
-      <button class="icon-btn" onclick="window.app.openShare()" aria-label="${t('share_title')}" title="${t('share_title')}" style="font-size:15px;">🔗</button>
-      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="${t('sync_latest')}" title="${t('sync_latest')}" style="font-size:15px;" id="refreshBtn">↻</button>
-      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="${t('help_title')}" title="${t('help_title')}" style="font-size:15px;">❓</button>
+      <button class="icon-btn" id="switchWorkspaceBtn" onclick="window.app.switchWorkspace()" aria-label="Switch workspace / Đổi workspace" title="Switch workspace / Đổi workspace" style="font-size:15px;">🏠</button>
+      <button class="icon-btn" id="shareBtn" onclick="window.app.openShare()" aria-label="Share" title="Share" style="font-size:15px;">🔗</button>
+      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="Refresh" title="Refresh" style="font-size:15px;" id="refreshBtn">↻</button>
+      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="Help" title="Help" style="font-size:15px;">❓</button>
       <button class="icon-btn lang-toggle-btn" onclick="toggleAppLang()" id="langToggleBtn" title="Switch language / Đổi ngôn ngữ" style="font-size:12px; font-weight:700; min-width:32px; letter-spacing:0.02em;">EN</button>
-      <span id="syncDot" class="sync-dot" title="${t('sync_status_title')}"></span>
+      <span id="syncDot" class="sync-dot" title="Sync status"></span>
     </div>
   </div>
   <div id="app"></div>
@@ -615,11 +615,18 @@ const APP_TRANSLATIONS = {
     sync_error_title: 'Lỗi đồng bộ - kiểm tra mạng',
     syncing_title: 'Đang đồng bộ...',
     offline_title: 'Đang offline - dữ liệu sẽ đồng bộ khi online',
-    share_title: 'Chia sẻ landing page',
-    share_heading: 'Mời người khác',
-    share_desc: 'Chia sẻ link này để mời bạn bè tham gia',
+    share_title: 'Chia sẻ',
+    share_heading: 'Chia sẻ',
+    share_desc: 'Chia sẻ link này để bạn bè dùng app TripSplit (họ sẽ tự tạo không gian riêng của họ)',
     share_copy_btn: 'Sao chép link',
     share_copied: 'Đã sao chép!',
+    share_trip_heading: 'Chia sẻ trip này',
+    share_trip_desc: 'Người nhận link này chỉ thấy được đúng trip này, không thấy các trip khác. Vẫn thêm/sửa chi tiêu được bình thường.',
+    share_trip_loading: 'Đang tạo link...',
+    share_trip_error: 'Không tạo được link, thử lại nhé',
+    share_trip_regenerate: 'Tạo lại link',
+    share_trip_regenerate_confirm: 'Link cũ sẽ ngừng hoạt động. Ai đang giữ link cũ sẽ không vào được nữa. Tiếp tục?',
+    share_workspace_heading: 'Giới thiệu app TripSplit',
     workspace_summary: 'Tất cả Trip',
     load_error_prefix: 'Không tải được dữ liệu:',
     retry_btn: 'Thử lại',
@@ -874,11 +881,18 @@ const APP_TRANSLATIONS = {
     sync_error_title: 'Sync error - check connection',
     syncing_title: 'Syncing...',
     offline_title: 'Offline - data will sync when back online',
-    share_title: 'Share landing page',
-    share_heading: 'Invite others',
-    share_desc: 'Share this link to invite friends to join',
+    share_title: 'Share',
+    share_heading: 'Share',
+    share_desc: 'Share this link so friends can use the TripSplit app (they will create their own separate workspace)',
     share_copy_btn: 'Copy link',
     share_copied: 'Copied!',
+    share_trip_heading: 'Share this trip',
+    share_trip_desc: "Whoever gets this link only sees this trip, not the others. They can still add/edit expenses normally.",
+    share_trip_loading: 'Creating link...',
+    share_trip_error: 'Could not create link, please try again',
+    share_trip_regenerate: 'Regenerate link',
+    share_trip_regenerate_confirm: 'The old link will stop working. Anyone holding it will lose access. Continue?',
+    share_workspace_heading: 'Share the TripSplit app',
     workspace_summary: 'All Trips',
     load_error_prefix: 'Could not load data:',
     retry_btn: 'Retry',
@@ -1667,17 +1681,23 @@ function formatActivityEntry(entry) {
 
 // ---- API layer ----
 async function apiGet() {
-  const res = await fetch(`${API_URL}?ws=${encodeURIComponent(WORKSPACE_ID)}`);
+  const url = TRIP_SHARE_TOKEN
+    ? `${API_URL}?ts=${encodeURIComponent(TRIP_SHARE_TOKEN)}`
+    : `${API_URL}?ws=${encodeURIComponent(WORKSPACE_ID)}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error('GET failed');
   const json = await res.json();
   if (json.ok === false) throw new Error(json.error || 'GET failed');
   return json;
 }
 async function apiPost(payload) {
+  const body = TRIP_SHARE_TOKEN
+    ? { ...payload, share_token: TRIP_SHARE_TOKEN }
+    : { ...payload, workspace_id: WORKSPACE_ID };
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
-    body: JSON.stringify({ ...payload, workspace_id: WORKSPACE_ID }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('POST failed');
   const json = await res.json();
@@ -1713,7 +1733,7 @@ async function saveOffline(trips, expenses, activityLog) {
     const store = tx.objectStore(STORE_NAME);
     await new Promise((resolve, reject) => {
       const req = store.put({
-        wsId: WORKSPACE_ID,
+        wsId: getOfflineCacheKey(),
         trips,
         expenses,
         activityLog: activityLog || [],
@@ -1734,7 +1754,7 @@ async function loadOffline() {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     return new Promise((resolve, reject) => {
-      const req = store.get(WORKSPACE_ID);
+      const req = store.get(getOfflineCacheKey());
       req.onerror = () => reject(req.error);
       req.onsuccess = () => {
         const data = req.result;
@@ -1974,6 +1994,10 @@ async function refreshData(showSpinner) {
     rawTrips = data.trips || [];
     rawExpenses = data.expenses || [];
     rawActivityLog = data.activityLog || [];
+    if (data.tripLocked && data.lockedTripId) {
+      TRIP_LOCKED_ID = data.lockedTripId;
+      activeTripId = data.lockedTripId; // luôn khóa vào đúng trip này, không cho đổi
+    }
     if (!activeTripId && rawTrips.length > 0) {
       const firstActive = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
       activeTripId = firstActive ? firstActive.trip_id : rawTrips[0].trip_id;
@@ -2323,6 +2347,12 @@ function render() {
   const langBtn = document.getElementById('langToggleBtn');
   if (langBtn) { langBtn.textContent = appLang === 'vi' ? 'EN' : 'VI'; langBtn.title = appLang === 'vi' ? 'Switch to English' : 'Chuyển sang tiếng Việt'; }
 
+  // Chế độ trip-share (khách chỉ xem/sửa đúng 1 trip): ẩn nút đổi workspace vì
+  // khách không có quyền quản lý workspace. Nút Share vẫn hiện bình thường - khách
+  // được phép share tiếp trip hiện tại cho người khác.
+  const switchWorkspaceBtn = document.getElementById('switchWorkspaceBtn');
+  if (switchWorkspaceBtn) switchWorkspaceBtn.style.display = TRIP_LOCKED_ID ? 'none' : '';
+
   if (!API_URL || API_URL === 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
     app.innerHTML = `<div class="setup-banner">
       ${t('api_not_configured')}
@@ -2350,11 +2380,13 @@ function render() {
   activeTrips.forEach(t => {
     html += `<div class="tab ${t.trip_id === activeTripId ? 'active' : ''}" data-action="selectTrip" data-id="${t.trip_id}">${escapeHtml(t.name)}</div>`;
   });
-  html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div>`;
-  
-  // NEW: Add "All Trips" tab at the end
-  html += `<div class="tab ${activeTripId === 'WORKSPACE' ? 'active' : ''}" data-action="selectTrip" data-id="WORKSPACE" style="margin-left:auto;">📊 ${t('workspace_summary') || 'All Trips'}</div>`;
-  html += `<div class="tab ${activeTripId === 'HISTORY' ? 'active' : ''}" data-action="selectTrip" data-id="HISTORY">📜 ${t('activity_log_title')}</div>`;
+  if (!TRIP_LOCKED_ID) {
+    html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div>`;
+
+    // NEW: Add "All Trips" tab at the end
+    html += `<div class="tab ${activeTripId === 'WORKSPACE' ? 'active' : ''}" data-action="selectTrip" data-id="WORKSPACE" style="margin-left:auto;">📊 ${t('workspace_summary') || 'All Trips'}</div>`;
+    html += `<div class="tab ${activeTripId === 'HISTORY' ? 'active' : ''}" data-action="selectTrip" data-id="HISTORY">📜 ${t('activity_log_title')}</div>`;
+  }
   
   html += `</div>`;
 
@@ -2842,7 +2874,7 @@ function render() {
     }
 
     html += `<div class="row" style="justify-content:space-between; margin-top:4px;">
-      <button class="danger-link" data-action="deleteTrip">${t('btn_delete_trip')}</button>
+      ${TRIP_LOCKED_ID ? '<span></span>' : `<button class="danger-link" data-action="deleteTrip">${t('btn_delete_trip')}</button>`}
       ${trip.archived
         ? `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="unarchiveTrip" data-id="${trip.trip_id}">${t('btn_unarchive')}</button>`
         : `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="archiveTrip" data-id="${trip.trip_id}">${t('btn_archive')}</button>`
@@ -3789,7 +3821,10 @@ window.app = {
   openShare() {
     const baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
     const landingUrl = baseUrl + 'landing.html';
-    
+    const currentTrip = (activeTripId && activeTripId !== 'WORKSPACE' && activeTripId !== 'HISTORY')
+      ? getTripObjects().find(tr => tr.trip_id === activeTripId)
+      : null;
+
     const overlay = document.createElement('div');
     overlay.id = 'shareOverlay';
     overlay.className = 'modal-overlay';
@@ -3798,9 +3833,30 @@ window.app = {
         <h2 style="margin:0;">${t('share_heading')}</h2>
         <button class="icon-btn" onclick="window.app.closeShare()" aria-label="${t('aria_close')}">✕</button>
       </div>
-      
+
+      ${currentTrip ? `
+        <div style="margin-bottom:16px;">
+          <p style="font-size:13.5px; font-weight:600; margin:0 0 4px;">🔒 ${t('share_trip_heading')}</p>
+          <p style="font-size:12.5px; color:var(--text-secondary); margin:0 0 10px;">${t('share_trip_desc')}</p>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input id="tripShareUrlInput" type="text" readonly value="${t('share_trip_loading')}" style="
+              flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm);
+              font-size:13px; font-family:monospace; background:var(--surface-2); color:var(--text-primary);
+            ">
+            <button class="primary" id="tripShareCopyBtn" onclick="window.app.copyShareLink('tripShareUrlInput','tripShareCopyBtn')" style="min-width:auto; padding:10px 16px;">
+              ${t('share_copy_btn')}
+            </button>
+          </div>
+          <button class="icon-btn" onclick="window.app.regenerateTripShare()" style="font-size:12px; padding:4px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); width:fit-content; ${TRIP_LOCKED_ID ? 'display:none;' : ''}">
+            🔄 ${t('share_trip_regenerate')}
+          </button>
+        </div>
+        <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
+        <p style="font-size:13px; font-weight:600; margin:0 0 4px;">👥 ${t('share_workspace_heading')}</p>
+      ` : ''}
+
       <p style="font-size:13.5px; color:var(--text-secondary); margin:0 0 12px;">${t('share_desc')}</p>
-      
+
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <input id="shareUrlInput" type="text" readonly value="${escapeHtml(landingUrl)}" style="
           flex:1;
@@ -3827,6 +3883,51 @@ window.app = {
     </div>`;
     document.body.appendChild(overlay);
     overlay.addEventListener('click', e => { if (e.target === overlay) window.app.closeShare(); });
+
+    if (currentTrip) {
+      window.app.loadTripShareLink(currentTrip.trip_id);
+    }
+  },
+
+  async loadTripShareLink(tripId) {
+    const input = document.getElementById('tripShareUrlInput');
+    try {
+      const result = await apiPost({ action: 'getOrCreateTripShare', trip_id: tripId });
+      if (input) {
+        if (result && result.token) {
+          const baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '') + 'index.html';
+          input.value = `${baseUrl}?ts=${result.token}`;
+        } else {
+          input.value = t('share_trip_error');
+        }
+      }
+    } catch (err) {
+      if (input) input.value = t('share_trip_error');
+    }
+  },
+
+  async regenerateTripShare() {
+    if (TRIP_LOCKED_ID) return; // chỉ chủ trip (không phải khách qua link share) mới được tạo lại link
+    const currentTrip = (activeTripId && activeTripId !== 'WORKSPACE' && activeTripId !== 'HISTORY')
+      ? getTripObjects().find(tr => tr.trip_id === activeTripId)
+      : null;
+    if (!currentTrip) return;
+    if (!confirm(t('share_trip_regenerate_confirm'))) return;
+    const input = document.getElementById('tripShareUrlInput');
+    if (input) input.value = t('share_trip_loading');
+    try {
+      const result = await apiPost({ action: 'regenerateTripShare', trip_id: currentTrip.trip_id });
+      if (input) {
+        if (result && result.token) {
+          const baseUrl = window.location.origin + window.location.pathname.replace(/index\.html$/, '') + 'index.html';
+          input.value = `${baseUrl}?ts=${result.token}`;
+        } else {
+          input.value = t('share_trip_error');
+        }
+      }
+    } catch (err) {
+      if (input) input.value = t('share_trip_error');
+    }
   },
 
   closeShare() {
@@ -3834,14 +3935,14 @@ window.app = {
     if (overlay) overlay.remove();
   },
 
-  copyShareLink() {
-    const input = document.getElementById('shareUrlInput');
+  copyShareLink(inputId, btnId) {
+    const input = document.getElementById(inputId || 'shareUrlInput');
     if (!input) return;
     
     input.select();
     try {
       document.execCommand('copy');
-      const btn = document.getElementById('shareCopyBtn');
+      const btn = document.getElementById(btnId || 'shareCopyBtn');
       const originalText = btn.textContent;
       btn.textContent = t('share_copied');
       setTimeout(() => {
@@ -4305,11 +4406,51 @@ window.app = {
 // ===== Xác định workspace trước khi khởi động app =====
 const WORKSPACE_STORAGE_KEY = 'tripsplit_workspace_id';
 let WORKSPACE_ID = '';
+let TRIP_SHARE_TOKEN = ''; // nếu có: đang ở chế độ share riêng 1 trip (link ?ts=...)
+let TRIP_LOCKED_ID = null; // trip_id bị khóa khi ở chế độ trip-share (server xác nhận sau khi tải data)
+
+function getOfflineCacheKey() {
+  // Chế độ trip-share dùng key cache riêng (theo token), tách biệt với workspace chính
+  return TRIP_SHARE_TOKEN ? ('share_' + TRIP_SHARE_TOKEN) : WORKSPACE_ID;
+}
 
 function getWorkspaceFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const ws = params.get('ws');
   return ws ? ws.trim() : '';
+}
+
+function getTripShareTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const ts = params.get('ts');
+  return ts ? ts.trim() : '';
+}
+
+// Khởi động app ở chế độ "share riêng 1 trip" - không đi qua màn hình tạo/nhập
+// workspace, chỉ tải đúng 1 trip mà token trỏ tới (server đã lọc sẵn).
+function startTripShareApp(token) {
+  TRIP_SHARE_TOKEN = token;
+  TRIP_LOCKED_ID = 'pending'; // giá trị tạm để ẩn ngay các nút/tab không phù hợp, tránh nháy UI trước khi có data thật
+  document.getElementById('app').innerHTML = '';
+
+  loadOffline().then(cachedData => {
+    if (cachedData.trips && cachedData.trips.length > 0) {
+      rawTrips = cachedData.trips;
+      rawExpenses = cachedData.expenses || [];
+      rawActivityLog = [];
+      if (rawTrips[0]) {
+        TRIP_LOCKED_ID = rawTrips[0].trip_id;
+        activeTripId = rawTrips[0].trip_id;
+      }
+      isLoading = false;
+      render();
+    }
+    refreshData(true);
+  }).catch(() => {
+    refreshData(true);
+  });
+
+  startPolling();
 }
 
 function startApp(workspaceId) {
@@ -4419,6 +4560,11 @@ window.app.confirmWorkspace = async function() {
 
 // ===== Khởi động =====
 (function initWorkspace() {
+  const shareToken = getTripShareTokenFromUrl();
+  if (shareToken) {
+    startTripShareApp(shareToken);
+    return;
+  }
   const fromUrl = getWorkspaceFromUrl();
   if (fromUrl) {
     startApp(fromUrl);
