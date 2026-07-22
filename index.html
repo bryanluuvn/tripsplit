@@ -2579,61 +2579,17 @@ function render() {
       html += `</div></div>`;
       
       // OPTIMIZED SETTLEMENTS (for manual transfer outside app)
-      let optimizedList = JSON.parse(JSON.stringify(ws.settlements));
-      let hasOptimization = true;
-      
-      while (hasOptimization) {
-        hasOptimization = false;
-        
-        for (let i = 0; i < optimizedList.length; i++) {
-          for (let j = 0; j < optimizedList.length; j++) {
-            if (i === j) continue;
-            
-            const s1 = optimizedList[i]; // A -> B
-            const s2 = optimizedList[j]; // B -> C
-            
-            if (s1.to === s2.from && s1.from !== s2.to) {
-              const amt1 = s1.amount;
-              const amt2 = s2.amount;
-              // Chỉ khử được phần trùng nhau giữa 2 cạnh (A->B và B->C).
-              // Phần dư (nếu amt1 !== amt2) vẫn phải giữ lại làm 1 giao dịch riêng,
-              // nếu không sẽ làm "mất" số tiền người ở giữa (B) đáng lẽ được nhận/phải trả.
-              const passThrough = Math.min(amt1, amt2);
-              
-              // A -> C nhận phần khử được
-              let existing = optimizedList.find(s => s.from === s1.from && s.to === s2.to);
-              if (existing) {
-                existing.amount += passThrough;
-              } else {
-                optimizedList.push({ from: s1.from, to: s2.to, amount: passThrough });
-              }
-              
-              const removeIdx = [];
-              if (amt1 > amt2 + 0.01) {
-                // A vẫn còn nợ B phần dư
-                s1.amount = amt1 - amt2;
-                removeIdx.push(j);
-              } else if (amt2 > amt1 + 0.01) {
-                // B vẫn còn nợ C phần dư
-                s2.amount = amt2 - amt1;
-                removeIdx.push(i);
-              } else {
-                // Bằng nhau: khử hết cả 2 cạnh gốc
-                removeIdx.push(i, j);
-              }
-              // Splice theo thứ tự index giảm dần để không lệch vị trí
-              removeIdx.sort((a, b) => b - a).forEach(idx => optimizedList.splice(idx, 1));
-              
-              hasOptimization = true;
-              break;
-            }
-          }
-          if (hasOptimization) break;
-        }
-      }
-      
-      optimizedList = optimizedList.filter(s => s.amount > 0.01);
-      
+      // Chỉ là gợi ý HIỂN THỊ để chuyển tiền tay ở ngoài app (không đụng vào danh
+      // sách "Kết quả chia tiền" gốc phía trên, vì nút Thanh toán cần map đúng
+      // theo từng trip). Cách tính: gộp số dư ròng của từng người từ chính danh
+      // sách gốc (bất biến, không phụ thuộc cách nó được tính ra), rồi chạy
+      // simplifyDebts MỘT LẦN để ra đúng số giao dịch tối thiểu có thể.
+      const netBalanceFromSettlements = {};
+      ws.settlements.forEach(s => {
+        netBalanceFromSettlements[s.from] = (netBalanceFromSettlements[s.from] || 0) - s.amount;
+        netBalanceFromSettlements[s.to] = (netBalanceFromSettlements[s.to] || 0) + s.amount;
+      });
+      let optimizedList = simplifyDebts(netBalanceFromSettlements, ws.homeCurrency);
       // Show optimized settlements if different
       if (optimizedList.length < ws.settlements.length) {
         html += `<div class="card" style="margin-top:12px; background:var(--surface-1); border:1px solid var(--surface-3);">
