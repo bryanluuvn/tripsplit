@@ -540,20 +540,18 @@ const APP_TRANSLATIONS = {
     help_title: 'Hướng dẫn sử dụng',
     aria_close: 'Đóng',
     help_got_it: 'Đã hiểu',
-    help_1_title: '1. Bắt đầu',
-    help_1_body: 'Lần đầu mở app, bạn đặt 1 tên riêng (không trùng người khác) để tách dữ liệu của bạn khỏi người khác cùng dùng app này. App tự nhớ tên đó cho các lần mở sau, không cần nhập lại.',
-    help_2_title: '2. Tạo trip và ghi chi tiêu',
-    help_2_body: 'Bấm "+ Trip mới" → đặt tên trip → thêm thành viên. Mỗi lần chi tiêu, bấm "+ Thêm chi tiêu", chọn ai trả, số tiền (nhập theo <strong>ngàn đồng</strong>, vd gõ 90 = 90.000đ), và chia cho ai (bỏ trống = chia đều cả nhóm).',
-    help_3_title: '3. Xem kết quả',
-    help_3_body: 'App tự tính "Số dư từng người" và "Kết quả chia tiền" — số giao dịch ít nhất để mọi người hòa sổ. Bấm 📋 để copy gửi nhóm, ⬇️ để tải CSV, 🖼️ để tải ảnh tổng kết đẹp.',
-    help_4_title: '4. Chi tiêu bằng ngoại tệ',
-    help_4_body: 'Khi tạo trip, tick "Có chi tiêu bằng ngoại tệ", chọn đơn vị và nhập tỷ giá quy đổi sang VNĐ. Khi ghi chi tiêu, chọn đúng đơn vị (VNĐ hoặc ngoại tệ) — app tự quy đổi và vẫn hiện rõ số tiền gốc để đối chiếu.',
-    help_5_title: '5. Quỹ tiền mặt chung',
-    help_5_body: 'Khi ai đó góp tiền vào quỹ chung của cả nhóm, chọn loại chi tiêu "Góp quỹ". Khi chi tiêu bằng tiền mặt từ quỹ, chọn "💰 Quỹ chung" ở mục "Ai trả". App tự tính số tiền mặt còn lại trong quỹ, tách riêng khỏi công nợ giữa mọi người.',
-    help_6_title: '6. Xem chi tiết từng thành viên',
-    help_6_body: 'Trong bảng "Tổng quan từng người", bấm vào <u>tên</u> bất kỳ thành viên nào để xem popup chi tiết — bao gồm số tiền đã chi/đã dùng/số dư, và danh sách đầy đủ các giao dịch mà người đó có phần, kèm đúng số tiền họ phải chịu trong từng giao dịch.',
-    help_7_title: '7. Khác',
-    help_7_body: 'Bấm tên thành viên trong card "Thành viên" để sửa tên · bấm ✏️ trên chi tiêu để sửa lại · "Lưu trữ trip" để ẩn trip cũ khỏi danh sách chính mà không mất dữ liệu · bộ lọc theo người/loại chi tiêu nằm ngay trên danh sách chi tiêu · bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác.',
+    help_g1_title: '🚀 Bắt đầu',
+    help_g1_body: '<li>Lần đầu mở app, đặt 1 tên riêng cho workspace — app tự nhớ, không cần nhập lại</li><li>"+ Trip mới" → đặt tên trip → thêm thành viên (có gợi ý người hay đi chung ở trip trước)</li><li>"+ Thêm chi tiêu" → chọn ai trả, số tiền, chia cho ai (nếu workspace dùng VNĐ, nhập theo <strong>ngàn đồng</strong> cho nhanh, vd gõ 90 = 90.000đ)</li>',
+    help_g2_title: '💵 Chi tiêu đặc biệt',
+    help_g2_body: '<li><strong>Ngoại tệ:</strong> bật khi tạo trip, nhập tỷ giá — app tự quy đổi, vẫn hiện số tiền gốc</li><li><strong>Quỹ tiền mặt chung:</strong> chọn "Góp quỹ" khi góp tiền, chọn "💰 Quỹ chung" khi chi từ quỹ</li><li><strong>Ảnh hóa đơn:</strong> đính kèm lúc thêm/sửa chi tiêu, bấm 🧾 trong danh sách để xem lại</li>',
+    help_g3_title: '📊 Xem & xuất kết quả',
+    help_g3_body: '<li>"Số dư" và "Kết quả chia tiền" tự tính, luôn ra số giao dịch ít nhất</li><li>Bấm tên ai đó trong "Tổng quan" để xem chi tiết từng giao dịch của họ</li><li>Bấm 📤 <strong>Xuất / Chia sẻ</strong> để chọn: Google Sheets, ảnh tổng kết, CSV, hoặc copy dạng text</li><li>Nút nổi 💰 nhảy nhanh tới kết quả, ↑ về đầu trang</li>',
+    help_g4_title: '🔗 Chia sẻ',
+    help_g4_body: '<li>🔗 ở header: chia sẻ link app TripSplit để bạn bè dùng thử (họ tự tạo workspace riêng của họ, không phải join vào workspace của bạn)</li><li>🔗 khi đang xem 1 trip: chia sẻ <strong>riêng trip đó</strong> — người nhận không thấy các trip khác</li><li>"Tạo lại link" bất cứ lúc nào để vô hiệu hóa link cũ</li>',
+    help_g5_title: '⚙️ Quản lý & khác',
+    help_g5_body: '<li>📜 <strong>Lịch sử:</strong> xem lại mọi thao tác, có nút "↩️ Khôi phục" nếu lỡ xóa nhầm</li><li>Sửa tên thành viên/chi tiêu bất cứ lúc nào · "Lưu trữ trip" ẩn trip cũ mà không mất dữ liệu</li><li>Bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác</li>',
+    help_feedback_title: 'Góp ý / Báo lỗi',
+    help_feedback_body: 'Có góp ý hoặc gặp lỗi khi dùng app, liên hệ:',
     archive_done: 'Đã lưu trữ trip',
     unarchive_done: 'Đã bỏ lưu trữ',
     sync_done: 'Đã đồng bộ dữ liệu mới nhất',
@@ -817,20 +815,18 @@ const APP_TRANSLATIONS = {
     help_title: 'How to use',
     aria_close: 'Close',
     help_got_it: 'Got it',
-    help_1_title: '1. Getting started',
-    help_1_body: 'The first time you open the app, set a unique name (not used by anyone else) to separate your data from other people using this app. The app remembers this name for next time, so you won\'t need to enter it again.',
-    help_2_title: '2. Create a trip and log expenses',
-    help_2_body: 'Tap "+ New Trip" → name the trip → add members. For each expense, tap "+ Add Expense", choose who paid, the amount, and who to split with (leave blank to split evenly among everyone).',
-    help_3_title: '3. View results',
-    help_3_body: 'The app automatically calculates "Each person\'s balance" and the "Settlement plan" — the minimum number of transactions needed to settle up. Tap 📋 to copy and share with the group, ⬇️ to download a CSV, 🖼️ to download a nice summary image.',
-    help_4_title: '4. Foreign currency expenses',
-    help_4_body: 'When creating a trip, check "Has foreign currency expenses", choose the currency, and enter the exchange rate to your home currency. When logging an expense, pick the right currency — the app converts it automatically while still showing the original amount for reference.',
-    help_5_title: '5. Shared cash fund',
-    help_5_body: 'When someone contributes cash to the group\'s shared fund, choose the "Fund contribution" category. When paying from the fund in cash, choose "💰 Shared fund" as the payer. The app automatically tracks how much cash remains in the fund, kept separate from debts between members.',
-    help_6_title: '6. View member details',
-    help_6_body: 'In the "Overview per person" table, tap any member\'s <u>name</u> to see a detail popup — including amounts paid/used/balance, and the full list of transactions they\'re part of, with their exact share of each one.',
-    help_7_title: '7. Other',
-    help_7_body: 'Tap a member\'s name in the "Members" card to rename them · tap ✏️ on an expense to edit it · "Archive trip" hides an old trip from the main list without losing data · filters by person/category sit right above the expense list · tap ↻ in the header to sync the latest data from others.',
+    help_g1_title: '🚀 Getting started',
+    help_g1_body: '<li>First time you open the app, set a unique name for your workspace — it\'s remembered automatically after that</li><li>"+ New Trip" → name it → add members (with quick-add suggestions from your other trips)</li><li>"+ Add Expense" → pick who paid, the amount, and who to split with</li>',
+    help_g2_title: '💵 Special expense types',
+    help_g2_body: '<li><strong>Foreign currency:</strong> enable when creating the trip, enter the rate — the app converts automatically and still shows the original amount</li><li><strong>Shared cash fund:</strong> choose "Fund contribution" when contributing, "💰 Shared fund" when paying from it</li><li><strong>Receipt photos:</strong> attach when adding/editing an expense, tap 🧾 in the list to view later</li>',
+    help_g3_title: '📊 View & export results',
+    help_g3_body: '<li>"Balance" and "Settlement plan" are calculated automatically, always the fewest transactions possible</li><li>Tap anyone\'s name in "Overview" to see their full transaction detail</li><li>Tap 📤 <strong>Export / Share</strong> to choose: Google Sheets, summary image, CSV, or copy as text</li><li>The floating 💰 button jumps to the results, ↑ scrolls back to top</li>',
+    help_g4_title: '🔗 Sharing',
+    help_g4_body: '<li>🔗 in the header: share the TripSplit app link so friends can try it (they create their own separate workspace, not join yours)</li><li>🔗 while viewing a trip: share <strong>just that trip</strong> — the recipient won\'t see the others</li><li>"Regenerate link" anytime to invalidate the old one</li>',
+    help_g5_title: '⚙️ Management & more',
+    help_g5_body: '<li>📜 <strong>History:</strong> see every action logged, with a "↩️ Restore" button if something gets deleted by mistake</li><li>Rename members/expenses anytime · "Archive trip" hides an old trip without losing data</li><li>Tap ↻ in the header to sync the latest data from others</li>',
+    help_feedback_title: 'Feedback / Report a bug',
+    help_feedback_body: 'Got feedback or ran into a bug, reach out:',
     archive_done: 'Trip archived',
     unarchive_done: 'Trip unarchived',
     sync_done: 'Data synced',
@@ -4135,49 +4131,29 @@ window.app = {
     const overlay = document.createElement('div');
     overlay.id = 'helpOverlay';
     overlay.className = 'modal-overlay';
+    const groupIds = ['g1', 'g2', 'g3', 'g4', 'g5'];
+    const groupsHtml = groupIds.map((g, i) => `
+      <div style="${i > 0 ? 'margin-top:10px; padding-top:10px; border-top:1px solid var(--border);' : ''}">
+        <p style="font-weight:600; margin:0 0 6px; font-size:13.5px;">${t('help_' + g + '_title')}</p>
+        <ul style="margin:0; padding-left:18px; color:var(--text-secondary); font-size:13px; line-height:1.55;">
+          ${t('help_' + g + '_body')}
+        </ul>
+      </div>
+    `).join('');
+
     overlay.innerHTML = `<div class="modal" style="max-width:480px;">
-      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
         <h2 style="margin:0;">${t('help_title')}</h2>
         <button class="icon-btn" onclick="window.app.closeHelp()" aria-label="${t('aria_close')}">✕</button>
       </div>
 
-      <div style="font-size:13.5px; line-height:1.6; color:var(--text-primary);">
+      ${groupsHtml}
 
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_1_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_1_body')}
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+        <p style="font-weight:600; margin-bottom:4px; font-size:13.5px;">${t('help_feedback_title')}</p>
+        <p style="margin:0; font-size:13px; color:var(--text-secondary);">
+          ${t('help_feedback_body')} <a href="mailto:bryanindata@gmail.com" style="color:var(--accent-text); font-weight:600;">bryanindata@gmail.com</a>
         </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_2_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_2_body')}
-        </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_3_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_3_body')}
-        </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_4_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_4_body')}
-        </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_5_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_5_body')}
-        </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_6_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_6_body')}
-        </p>
-
-        <p style="font-weight:600; margin-bottom:4px;">${t('help_7_title')}</p>
-        <p style="margin-top:0; color:var(--text-secondary);">
-          ${t('help_7_body')}
-        </p>
-
       </div>
 
       <div class="row" style="justify-content:flex-end; margin-top:14px;">
