@@ -1914,7 +1914,10 @@ function showToast(msg) {
 function getTripObjects() {
   return rawTrips.map(t => ({
     trip_id: t.trip_id,
-    name: t.trip_name,
+    // Ép luôn thành String: Google Sheets tự động convert những tên trip "giống số"
+    // (vd "23.7", "22.7") thành kiểu Number khi đọc qua API, khiến các hàm string
+    // như .replace()/.trim() ở chỗ khác (export CSV/ảnh...) bị lỗi ngầm.
+    name: String(t.trip_name),
     members: parseMembers(t.members),
     archived: t.archived === 'true' || t.archived === true,
     foreignCurrency: t.foreign_currency || '',
