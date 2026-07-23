@@ -402,6 +402,7 @@ const APP_TRANSLATIONS = {
     btn_add_expense: '+ Thêm chi tiêu',
     btn_add_member: 'Thêm',
     member_placeholder: 'Tên thành viên',
+    quick_add_member_hint: 'Hay đi chung nhất:',
     member_hint: 'Bấm tên để sửa · Kéo ⠿ để sắp xếp',
     no_expense: 'Chưa có chi tiêu nào.',
     expense_filter_all_payer: 'Tất cả người trả',
@@ -673,6 +674,7 @@ const APP_TRANSLATIONS = {
     btn_add_expense: '+ Add expense',
     btn_add_member: 'Add',
     member_placeholder: 'Member name',
+    quick_add_member_hint: 'Frequent travel buddies:',
     member_hint: 'Tap name to edit · Drag ⠿ to reorder',
     no_expense: 'No expenses yet.',
     expense_filter_all_payer: 'All payers',
@@ -1922,6 +1924,25 @@ function getTripObjects() {
 }
 
 // Sort trips by custom order (tripOrder array) + newest first as default
+// Gom danh sách thành viên duy nhất đã từng xuất hiện ở BẤT KỲ trip nào trong
+// workspace (dùng để gợi ý chọn nhanh khi thêm thành viên cho 1 trip khác),
+// loại trừ những người đã có sẵn trong danh sách truyền vào. Xếp theo số lần
+// xuất hiện ở các trip (ai đi chung nhiều trip nhất hiện trước), giới hạn top 4
+// để không chiếm quá nhiều không gian màn hình.
+function getKnownMembersExcluding(excludeList, limit = 4) {
+  const exclude = new Set(excludeList || []);
+  const countByName = {};
+  getTripObjects().forEach(trip => {
+    trip.members.forEach(m => {
+      if (m && !exclude.has(m)) countByName[m] = (countByName[m] || 0) + 1;
+    });
+  });
+  return Object.entries(countByName)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([name]) => name);
+}
+
 function getSortedTrips(trips) {
   // First: sort by newest (reverse order from Sheet - last added = newest)
   const newestFirst = [...trips].reverse();
@@ -2674,7 +2695,22 @@ function render() {
     html += `</div><div class="row">
       <input id="memberInput" placeholder="${t('member_placeholder')}" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
       <button onclick="window.app.addMember()">${t('btn_add_member')}</button>
-    </div></div>`;
+    </div>`;
+
+    const suggestedMembers = getKnownMembersExcluding(trip.members);
+    if (suggestedMembers.length > 0) {
+      html += `<div style="margin-top:10px;">
+        <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">${t('quick_add_member_hint')}</div>
+        <div class="row" style="flex-wrap:wrap; gap:6px;">`;
+      suggestedMembers.forEach(m => {
+        html += `<button class="chip-btn" data-action="quickAddMember" data-name="${escapeHtml(m)}" style="
+          padding:5px 12px; border-radius:999px; border:1px solid var(--border-strong);
+          background:var(--surface-2); font-size:12.5px; cursor:pointer; color:var(--text-primary);
+        ">+ ${escapeHtml(m)}</button>`;
+      });
+      html += `</div></div>`;
+    }
+    html += `</div>`;
 
     html += `<div class="card">
       <div class="card-head">
@@ -2931,6 +2967,7 @@ function handleAction(e) {
   if (action === 'viewReceipt') { window.app.viewReceipt(url); return; }
   if (action === 'restoreExpense') { window.app.restoreExpense(payload); return; }
   if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
+  if (action === 'quickAddMember') { window.app.addMember(name); return; }
 
   if (action === 'openWorkspaceSettleDialog') {
     const from = e.currentTarget.dataset.from;
@@ -4164,12 +4201,12 @@ window.app = {
     }
   },
 
-  addMember() {
-    const name = memberInput.trim();
+  addMember(explicitName) {
+    const name = (explicitName !== undefined ? explicitName : memberInput).trim();
     if (!name) return;
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     const currentMembers = parseMembers(trip.members);
-    if (currentMembers.includes(name)) { memberInput = ''; return; }
+    if (currentMembers.includes(name)) { memberInput = ''; render(); return; }
     const newMembers = [...currentMembers, name];
     memberInput = '';
     withSaving(
