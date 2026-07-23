@@ -367,6 +367,13 @@
     </div>
   </div>
   <div id="app"></div>
+  <button id="jumpToSettlementBtn" onclick="window.app.scrollToSettlement()" aria-label="Jump to settlement" title="Jump to settlement" style="
+    display:none; position:fixed; bottom:20px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background:var(--accent, #8B5CF6); color:#fff; font-size:22px;
+    align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(26,26,46,0.28);
+    cursor:pointer;
+  ">💰</button>
 </div>
 
 <script>
@@ -2629,7 +2636,7 @@ function render() {
     
     // Settlement
     if (ws.settlements.length > 0) {
-      html += `<div class="card">
+      html += `<div class="card" id="settlementCard">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
           <div class="row" style="gap:6px;">
@@ -2702,12 +2709,14 @@ function render() {
         </div>`;
       }
     } else {
-      html += `<div class="row" style="justify-content:flex-end; gap:6px; margin-bottom:8px;">
+      html += `<div id="settlementCard">
+      <div class="row" style="justify-content:flex-end; gap:6px; margin-bottom:8px;">
         <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
         <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
         <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
+      </div>
+      <p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>
       </div>`;
-      html += `<p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>`;
     }
   } else if (activeTripId === 'HISTORY') {
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
@@ -2897,7 +2906,7 @@ function render() {
         html += `</div>`;
       }
 
-      html += `<div class="card">
+      html += `<div class="card" id="settlementCard">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
           <div class="row" style="gap:6px;">
@@ -2944,6 +2953,16 @@ function render() {
   }
 
   app.innerHTML = html;
+
+  // Nút nổi "nhảy tới phần chia tiền" - chỉ hiện khi trang vừa render THỰC SỰ có
+  // card settlement (không hiện trong modal, tab Lịch sử, hay khi chưa có trip nào).
+  const jumpBtn = document.getElementById('jumpToSettlementBtn');
+  if (jumpBtn) {
+    jumpBtn.style.display = (document.getElementById('settlementCard') && !modal) ? 'flex' : 'none';
+    const jumpLabel = appLang === 'vi' ? 'Xem kết quả chia tiền' : 'Jump to settlement';
+    jumpBtn.setAttribute('aria-label', jumpLabel);
+    jumpBtn.setAttribute('title', jumpLabel);
+  }
 
   app.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handleAction));
   const mi = document.getElementById('memberInput');
@@ -3923,6 +3942,11 @@ function renderModal() {
 
 window.app = {
   retry() { isLoading = true; render(); refreshData(true); },
+
+  scrollToSettlement() {
+    const el = document.getElementById('settlementCard');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
 
   viewReceipt(url) {
     if (!url) return;
