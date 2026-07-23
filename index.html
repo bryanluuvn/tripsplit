@@ -638,6 +638,7 @@ const APP_TRANSLATIONS = {
     csv_col_category: 'Loại',
     csv_col_payer: 'Người trả',
     csv_col_desc: 'Mô tả',
+    csv_col_trip: 'Chuyến đi',
     csv_col_receipt: 'Link hóa đơn',
     img_overview_title: 'TỔNG QUAN TỪNG NGƯỜI',
     img_cash_fund_title: 'QUỸ TIỀN MẶT CHUNG',
@@ -905,6 +906,7 @@ const APP_TRANSLATIONS = {
     csv_col_category: 'Category',
     csv_col_payer: 'Payer',
     csv_col_desc: 'Description',
+    csv_col_trip: 'Trip',
     csv_col_receipt: 'Receipt link',
     img_overview_title: 'OVERVIEW PER PERSON',
     img_cash_fund_title: 'SHARED CASH FUND',
@@ -1205,13 +1207,15 @@ function renderDailyChart(expenses) {
 }
 
 
-function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining) {
+function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining, optimizedSettlements) {
   const W = 600;
   const PAD = 36;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const scale = 2;
   const hasCashFund = Array.isArray(cashFundRemaining) && cashFundRemaining.length > 0;
+  // Chỉ hiện block "tối ưu" nếu thực sự gộp được ít giao dịch hơn
+  const showOptimized = Array.isArray(optimizedSettlements) && optimizedSettlements.length > 0 && optimizedSettlements.length < settlements.length;
 
   // Tính thêm paid và usage để vẽ bảng đầy đủ 3 cột
   const paid = computePaid(trip.members, expenses);
@@ -1228,6 +1232,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   estHeight += 22 + 20 + trip.members.length * 26 + 6 + 28; // header tổng quan + dòng thành viên + line
   if (hasCashFund) estHeight += 22 + cashFundRemaining.length * 26 + 10 + 28; // khối quỹ tiền mặt (1 dòng/đơn vị) + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
+  if (showOptimized) estHeight += 24 + optimizedSettlements.length * 28 + 10; // cách chuyển tiền tối ưu
   estHeight += 20; // footer + padding đáy
 
   canvas.width = W * scale;
@@ -1429,6 +1434,32 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     });
   }
   y += 10;
+
+  // --- Cách chuyển tiền tối ưu (chỉ hiện nếu gộp được ít giao dịch hơn) ---
+  if (showOptimized) {
+    ctx.fillStyle = '#9295B0';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.fillText(appLang === 'vi' ? '💡 CÁCH CHUYỂN TIỀN TỐI ƯU (MANUAL)' : '💡 OPTIMIZED TRANSFER (MANUAL)', PAD, y);
+    y += 24;
+    optimizedSettlements.forEach(s => {
+      ctx.fillStyle = '#1A1A2E';
+      ctx.font = '600 14px -apple-system, sans-serif';
+      ctx.fillText(s.from, PAD, y);
+      const fromWidth = ctx.measureText(s.from).width;
+      ctx.fillStyle = '#8B5CF6';
+      ctx.font = '600 14px -apple-system, sans-serif';
+      ctx.fillText(' → ', PAD + fromWidth, y);
+      const arrowWidth = ctx.measureText(' → ').width;
+      ctx.fillStyle = '#1A1A2E';
+      ctx.fillText(s.to, PAD + fromWidth + arrowWidth, y);
+      ctx.font = '700 14px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(fmtHome(s.amount, currentHomeCurrency()), W - PAD, y);
+      ctx.textAlign = 'left';
+      y += 28;
+    });
+    y += 10;
+  }
 
   // --- Footer ---
   ctx.fillStyle = '#9295B0';
@@ -1986,7 +2017,10 @@ function getExpensesForTrip(trip) {
       
       // FALLBACK: If splitWith empty and not a fund contribution, use all trip members
       if ((!splitWith || splitWith.length === 0) && e.category !== 'fund') {
-        splitWith = trip.members || [];
+        // trip.members có thể là mảng (nếu gọi với trip đã parse qua getTripObjects())
+        // hoặc chuỗi "A,B,C" (nếu gọi với trip thô từ rawTrips) - luôn ép về mảng để
+        // tránh splitWith bị gán nhầm thành string (gây lỗi .join() ở chỗ dùng sau này).
+        splitWith = Array.isArray(trip.members) ? trip.members : parseMembers(trip.members);
       }
       
       return {
@@ -2208,6 +2242,28 @@ function initTripDragSort() {
 
 // Compute workspace-level settlements (across all trips)
 // FIX: Aggregate trip settlements directly instead of recalculating from scratch
+// Gom dữ liệu từ TẤT CẢ trip đang hoạt động để phục vụ export CSV/ảnh ở tab "All Trips".
+// Mỗi expense được gắn thêm .tripName để phân biệt nguồn gốc khi xuất gộp nhiều trip.
+function getWorkspaceExportData() {
+  const activeTrips = getTripObjects().filter(t => !t.archived);
+  const allMembers = new Set();
+  const allExpenses = [];
+  activeTrips.forEach(trip => {
+    const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
+    if (!tripObj) return;
+    const tripExpenses = getExpensesForTrip(tripObj);
+    tripExpenses.forEach(e => { e.tripName = trip.name; });
+    allExpenses.push(...tripExpenses);
+    trip.members.forEach(m => allMembers.add(m));
+  });
+  const members = [...allMembers];
+  const paid = computePaid(members, allExpenses);
+  const usage = computeUsage(members, allExpenses);
+  const balances = computeBalances(members, allExpenses);
+  const homeCurrency = activeTrips.length > 0 ? activeTrips[0].homeCurrency : 'VND';
+  return { activeTrips, members, allExpenses, paid, usage, balances, homeCurrency };
+}
+
 function getWorkspaceSettlements() {
   const activeTrips = getTripObjects().filter(t => !t.archived);
     console.log('[WS] Active trips:', activeTrips.length);
@@ -2576,6 +2632,11 @@ function render() {
       html += `<div class="card">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
+          <div class="row" style="gap:6px;">
+            <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
+            <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+            <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
+          </div>
         </div>
         <div class="card-body">`;
       
@@ -2641,6 +2702,11 @@ function render() {
         </div>`;
       }
     } else {
+      html += `<div class="row" style="justify-content:flex-end; gap:6px; margin-bottom:8px;">
+        <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
+        <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+        <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
+      </div>`;
       html += `<p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>`;
     }
   } else if (activeTripId === 'HISTORY') {
@@ -3178,6 +3244,117 @@ function handleAction(e) {
     );
   }
 
+  if (action === 'exportWorkspaceImage') {
+    const { members, allExpenses, balances, homeCurrency } = getWorkspaceExportData();
+    const { peopleBalances } = splitCashFundBalance(balances);
+    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(allExpenses);
+    const settlements = getWorkspaceSettlements().settlements;
+    const netBalanceForImage = {};
+    settlements.forEach(s => {
+      netBalanceForImage[s.from] = (netBalanceForImage[s.from] || 0) - s.amount;
+      netBalanceForImage[s.to] = (netBalanceForImage[s.to] || 0) + s.amount;
+    });
+    const optimizedForImage = simplifyDebts(netBalanceForImage, homeCurrency);
+    const pseudoTrip = { name: t('workspace_summary') || 'All Trips', members, homeCurrency };
+    generateSummaryImage(pseudoTrip, allExpenses, peopleBalances, settlements, hasCashFund ? cashFundRemaining : null, optimizedForImage);
+  }
+
+  if (action === 'exportWorkspaceCsv') {
+    const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
+    const { peopleBalances } = splitCashFundBalance(balances);
+    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(allExpenses);
+    const settlements = getWorkspaceSettlements().settlements;
+
+    function csvEscape(val) {
+      const s = String(val ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    let rows = [];
+    // ---- Raw data: có thêm cột Trip vì đây là gộp nhiều trip ----
+    rows.push([
+      t('csv_col_trip'), t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
+      t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${homeCurrency || 'VND'})`, t('export_col_split'),
+      ...members.map(m => `${t('export_member_share_prefix')} ${m} (${homeCurrency || 'VND'})`),
+      t('csv_col_receipt'),
+    ]);
+    allExpenses.slice().reverse().forEach(ex => {
+      const isFund = ex.category === 'fund';
+      const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
+      const memberShares = members.map(m => {
+        if (isFund) return '';
+        return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, homeCurrency) : '';
+      });
+      rows.push([
+        ex.tripName || '', ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
+        ex.desc || '', ex.amount, ex.currency || (homeCurrency || 'VND'), roundCurrency(ex.amountVND, homeCurrency),
+        isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
+        ...memberShares,
+        ex.receiptUrl || '',
+      ]);
+    });
+
+    // ---- Tổng quan từng người ----
+    rows.push([]);
+    rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
+    members.forEach(m => {
+      rows.push([
+        m,
+        roundCurrency(paid[m] || 0, homeCurrency),
+        roundCurrency(usage[m] || 0, homeCurrency),
+        roundCurrency(peopleBalances[m] || 0, homeCurrency),
+      ]);
+    });
+
+    // ---- Quỹ tiền mặt chung ----
+    if (hasCashFund) {
+      rows.push([]);
+      rows.push([t('cash_fund_remaining')]);
+      cashFundRemaining.forEach(r => {
+        rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, homeCurrency)]);
+      });
+    }
+
+    // ---- Kết quả thanh toán ----
+    rows.push([]);
+    rows.push([t('settlement_title')]);
+    if (settlements.length === 0) {
+      rows.push([t('all_settled')]);
+    } else {
+      settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
+    }
+
+    // ---- Cách chuyển tiền tối ưu (nếu gộp được ít giao dịch hơn) ----
+    const netBalanceForExport = {};
+    settlements.forEach(s => {
+      netBalanceForExport[s.from] = (netBalanceForExport[s.from] || 0) - s.amount;
+      netBalanceForExport[s.to] = (netBalanceForExport[s.to] || 0) + s.amount;
+    });
+    const optimizedForExport = simplifyDebts(netBalanceForExport, homeCurrency);
+    if (optimizedForExport.length > 0 && optimizedForExport.length < settlements.length) {
+      rows.push([]);
+      rows.push([appLang === 'vi' ? 'Cách chuyển tiền tối ưu (manual)' : 'Optimized Transfer (Manual)']);
+      optimizedForExport.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
+    }
+
+    const csvContent = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${String(t('workspace_summary') || 'All-Trips').replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(t('toast_csv_done'));
+  }
+
   if (action === 'exportImage') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
     const expenses = getExpensesForTrip(trip);
@@ -3326,6 +3503,66 @@ function handleAction(e) {
     text += `\n${t('export_settlement_header')}:\n`;
     if (settlements.length === 0) text += t('all_settled') + '\n';
     else settlements.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmtHome(s.amount, currentHomeCurrency())}\n`; });
+
+    navigator.clipboard.writeText(text).then(() => showToast(t('toast_copy_done')));
+  }
+
+  if (action === 'copyWorkspaceSummary') {
+    const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
+    const { peopleBalances } = splitCashFundBalance(balances);
+    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const cashFundRemaining = computeCashFundRemaining(allExpenses);
+    const settlements = getWorkspaceSettlements().settlements;
+    const netBalanceForCopy = {};
+    settlements.forEach(s => {
+      netBalanceForCopy[s.from] = (netBalanceForCopy[s.from] || 0) - s.amount;
+      netBalanceForCopy[s.to] = (netBalanceForCopy[s.to] || 0) + s.amount;
+    });
+    const optimizedForCopy = simplifyDebts(netBalanceForCopy, homeCurrency);
+    const showOptimized = optimizedForCopy.length > 0 && optimizedForCopy.length < settlements.length;
+
+    let text = `${t('export_summary_header')} - ${t('workspace_summary') || 'All Trips'}\n\n`;
+
+    // Danh sách chi tiêu (gộp tất cả trip, có ghi tên trip cho rõ)
+    allExpenses.slice().reverse().forEach(ex => {
+      const amountText = ex.currency
+        ? `${ex.amount.toLocaleString(numLocale())}${currencySymbol(ex.currency)} (≈${fmtHome(ex.amountHome, homeCurrency)})`
+        : fmtHome(ex.amountHome, homeCurrency);
+      text += `[${ex.tripName || ''}] ${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} ${t('copy_paid_word')} ${amountText}${ex.desc ? ' ' + t('copy_for_word') + ' ' + ex.desc : ''}\n`;
+    });
+
+    // Bảng tổng quan 3 cột — pad bằng tab để thẳng hàng trong monospace font
+    text += `\n${t('overview_title')}:\n`;
+    const maxNameLen = Math.max(...members.map(m => m.length), 4);
+    const pad = (s, n) => String(s).padEnd(n);
+    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${t('col_balance')}\n`;
+    members.forEach(m => {
+      const bal = roundCurrency(peopleBalances[m] || 0, homeCurrency);
+      const TH = settleThreshold(homeCurrency);
+      const note = bal > TH ? ` ${t('will_receive')}` : bal < -TH ? ` ${t('needs_to_pay')}` : ` ${t('settled')}`;
+      const balStr = (bal > 0 ? '+' : '') + fmtHome(bal, homeCurrency) + note;
+      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, homeCurrency), 10)}${balStr}\n`;
+    });
+
+    // Quỹ tiền mặt chung
+    if (hasCashFund) {
+      text += `\n${t('cash_fund_remaining')}:\n`;
+      cashFundRemaining.forEach(r => {
+        const display = r.currency ? fmtForeign(r.remaining, r.currency) : fmtHome(r.remaining, homeCurrency);
+        text += `  ${r.label}: ${display}\n`;
+      });
+    }
+
+    // Kết quả thanh toán
+    text += `\n${t('export_settlement_header')}:\n`;
+    if (settlements.length === 0) text += t('all_settled') + '\n';
+    else settlements.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmtHome(s.amount, homeCurrency)}\n`; });
+
+    // Cách chuyển tiền tối ưu (nếu có)
+    if (showOptimized) {
+      text += `\n${appLang === 'vi' ? 'Cách chuyển tiền tối ưu (manual)' : 'Optimized Transfer (Manual)'}:\n`;
+      optimizedForCopy.forEach(s => { text += `  ${s.from} → ${s.to}: ${fmtHome(s.amount, homeCurrency)}\n`; });
+    }
 
     navigator.clipboard.writeText(text).then(() => showToast(t('toast_copy_done')));
   }
