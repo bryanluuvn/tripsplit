@@ -145,6 +145,11 @@
   button.primary:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
   button.ghost { border: none; background: none; color: var(--text-muted); padding: 4px; height: auto; }
 
+  #jumpToSettlementBtn, #scrollToTopBtn { transition: all 0.12s ease; }
+  #jumpToSettlementBtn:hover { background: var(--blue-dark); }
+  #jumpToSettlementBtn:active, #scrollToTopBtn:active { transform: scale(0.94); }
+  #scrollToTopBtn:hover { background: var(--surface-2); color: var(--text-primary); }
+
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 14px; border-radius: 20px;
@@ -369,11 +374,18 @@
   <div id="app"></div>
   <button id="jumpToSettlementBtn" onclick="window.app.scrollToSettlement()" aria-label="Jump to settlement" title="Jump to settlement" style="
     display:none; position:fixed; bottom:20px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
-    width:52px; height:52px; border-radius:50%; border:none;
-    background:var(--accent, #8B5CF6); color:#fff; font-size:22px;
-    align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(26,26,46,0.28);
+    width:46px; height:46px; border-radius:50%; border:none;
+    background:var(--blue, #4A6CF7); color:#fff; font-size:19px;
+    align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(74,108,247,0.35);
     cursor:pointer;
   ">💰</button>
+  <button id="scrollToTopBtn" onclick="window.app.scrollToTop()" aria-label="Scroll to top" title="Scroll to top" style="
+    display:none; position:fixed; bottom:76px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
+    width:46px; height:46px; border-radius:50%; border:1.5px solid var(--border-strong, #CBCFE8);
+    background:var(--surface, #fff); color:var(--text-muted, #9295B0); font-size:16px;
+    align-items:center; justify-content:center; box-shadow:var(--shadow-card, 0 1px 8px rgba(26,26,46,0.06));
+    cursor:pointer;
+  ">↑</button>
 </div>
 
 <script>
@@ -3948,6 +3960,10 @@ window.app = {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
 
+  scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
   viewReceipt(url) {
     if (!url) return;
     const overlay = document.createElement('div');
@@ -4816,6 +4832,13 @@ window.app.confirmWorkspace = async function() {
 };
 
 // ===== Khởi động =====
+// Nút "quay về đầu trang": chỉ hiện khi đã cuộn xuống đủ xa (>300px), độc lập
+// với chu trình render() vì phụ thuộc vị trí cuộn chứ không phải state của app.
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('scrollToTopBtn');
+  if (btn) btn.style.display = window.scrollY > 300 ? 'flex' : 'none';
+}, { passive: true });
+
 (function initWorkspace() {
   const shareToken = getTripShareTokenFromUrl();
   if (shareToken) {
