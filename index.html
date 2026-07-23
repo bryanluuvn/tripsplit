@@ -267,7 +267,7 @@
   .balance-note { color: var(--text-muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
 
   .overview-head-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+    display: grid; grid-template-columns: 1.1fr 0.9fr 0.9fr 0.9fr 0.9fr;
     padding: 0 0 6px; gap: 4px;
   }
   .overview-head-label {
@@ -275,10 +275,11 @@
     letter-spacing: 0.02em; text-align: right;
   }
   .overview-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+    display: grid; grid-template-columns: 1.1fr 0.9fr 0.9fr 0.9fr 0.9fr;
     align-items: center; padding: 6px 0; gap: 4px; font-size: 13px;
   }
   .overview-val { text-align: right; font-variant-numeric: tabular-nums; }
+  .overview-val-sub { text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; }
 
   .icon-btn {
     border: none; background: none; padding: 6px; cursor: pointer; display: inline-flex;
@@ -430,6 +431,9 @@ const APP_TRANSLATIONS = {
     col_paid: 'Đã chi',
     col_used: 'Đã dùng',
     col_balance: 'Số dư',
+    col_net_payment: 'Tất toán',
+    settle_paid_word: 'Trả',
+    settle_received_word: 'Nhận',
     balance_note: 'Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.',
     will_receive: '(sẽ nhận lại)',
     needs_to_pay: '(cần trả thêm)',
@@ -483,7 +487,7 @@ const APP_TRANSLATIONS = {
     export_col_orig_amount: 'Số tiền gốc', export_col_orig_unit: 'Đơn vị',
     export_col_home_amount: 'Số tiền (home)',
     export_col_split: 'Chia cho',
-    export_col_paid: 'Đã chi (home)', export_col_used: 'Đã dùng (home)', export_col_bal: 'Số dư (home)',
+    export_col_paid: 'Đã chi (home)', export_col_used: 'Đã dùng (home)', export_col_settled: 'Tất toán (home)', export_col_bal: 'Số dư (home)',
     export_member_share_prefix: 'Phần của',
     export_no_split: 'Không chia (góp quỹ)',
     export_split_all: 'Cả nhóm',
@@ -516,8 +520,9 @@ const APP_TRANSLATIONS = {
     chart_total: 'TỔNG CHI TIÊU',
     overview_paid: 'ĐÃ CHI',
     overview_used: 'ĐÃ DÙNG',
+    overview_settled: 'TẤT TOÁN',
     overview_balance: 'SỐ DƯ',
-    overview_note: 'Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.',
+    overview_note: 'Đã chi − Đã dùng − Đã tất toán = Số dư. "Đã dùng" không tính tiền góp quỹ. "Đã tất toán": dấu + là đã nhận thanh toán, dấu − là đã trả thanh toán.',
     overview_tap_hint: '👆 Bấm vào tên để xem chi tiết giao dịch của từng người',
     settlement_copy: 'Copy dạng text',
     btn_archive: 'Lưu trữ trip',
@@ -708,6 +713,9 @@ const APP_TRANSLATIONS = {
     col_paid: 'Paid',
     col_used: 'Used',
     col_balance: 'Balance',
+    col_net_payment: 'Settled',
+    settle_paid_word: 'Paid',
+    settle_received_word: 'Recv',
     balance_note: 'Paid − Used = Balance. "Used" excludes fund contributions.',
     will_receive: '(will receive)',
     needs_to_pay: '(owes more)',
@@ -759,7 +767,7 @@ const APP_TRANSLATIONS = {
     export_col_orig_amount: 'Original amount', export_col_orig_unit: 'Currency',
     export_col_home_amount: 'Amount (home)',
     export_col_split: 'Split with',
-    export_col_paid: 'Paid (home)', export_col_used: 'Used (home)', export_col_bal: 'Balance (home)',
+    export_col_paid: 'Paid (home)', export_col_used: 'Used (home)', export_col_settled: 'Settled (home)', export_col_bal: 'Balance (home)',
     export_member_share_prefix: 'Share of',
     export_no_split: 'No split (fund)',
     export_split_all: 'Everyone',
@@ -791,8 +799,9 @@ const APP_TRANSLATIONS = {
     chart_total: 'TOTAL SPENDING',
     overview_paid: 'PAID',
     overview_used: 'USED',
+    overview_settled: 'SETTLED',
     overview_balance: 'BALANCE',
-    overview_note: 'Paid − Used = Balance. \"Used\" excludes fund contributions.',
+    overview_note: 'Paid − Used − Settled = Balance. "Used" excludes fund contributions. "Settled": + means payment received, − means payment made.',
     overview_tap_hint: '👆 Tap a name to see their detailed transactions',
     settlement_copy: 'Copy as text',
     btn_archive: 'Archive trip',
@@ -1246,9 +1255,10 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   // Chỉ hiện block "tối ưu" nếu thực sự gộp được ít giao dịch hơn
   const showOptimized = Array.isArray(optimizedSettlements) && optimizedSettlements.length > 0 && optimizedSettlements.length < settlements.length;
 
-  // Tính thêm paid và usage để vẽ bảng đầy đủ 3 cột
+  // Tính thêm paid và usage để vẽ bảng đầy đủ 4 cột
   const paid = computePaid(trip.members, expenses);
   const usage = computeUsage(trip.members, expenses);
+  const settlementsNet = computeSettlementsNet(trip.members, expenses);
 
   // --- Bước 1: đo trước chiều cao cần thiết bằng cách render thử trên canvas tạm ---
   const { rows: catRows, grandTotal } = computeCategoryTotals(expenses);
@@ -1370,17 +1380,21 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   ctx.fillText(t('img_overview_title'), PAD, y);
   y += 20;
 
-  // Header hàng cột
-  const COL1 = PAD; // Tên (flex left)
-  const COL2 = W - PAD - 260; // Đã chi
-  const COL3 = W - PAD - 160; // Đã dùng
-  const COL4 = W - PAD;       // Số dư (right-aligned)
+  // Header hàng cột - 5 cột: Tên | Đã chi | Đã dùng | Tất toán | Số dư.
+  // Thu hẹp cột tên và các cột số nhỏ lại 1 chút để có chỗ cho cột Tất toán mới,
+  // cột Số dư vẫn giữ nhiều không gian nhất (chữ đậm + có thể có dấu +/-).
+  const COL1 = PAD;           // Tên (flex left)
+  const COL2 = 250;           // Đã chi
+  const COL3 = 340;           // Đã dùng
+  const COL4 = 440;           // Tất toán
+  const COL5 = W - PAD;       // Số dư (right-aligned)
   ctx.fillStyle = '#9295B0';
-  ctx.font = '500 11px -apple-system, sans-serif';
+  ctx.font = '500 10px -apple-system, sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(t('overview_paid'), COL2, y);
   ctx.fillText(t('overview_used'), COL3, y);
-  ctx.fillText(t('overview_balance'), COL4, y);
+  ctx.fillText(t('overview_settled'), COL4, y);
+  ctx.fillText(t('overview_balance'), COL5, y);
   ctx.textAlign = 'left';
   y += 18;
 
@@ -1388,19 +1402,26 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     const bal = roundCurrency(balances[m] || 0, trip.homeCurrency);
     const TH = settleThreshold(trip.homeCurrency);
     const isPos = bal > TH, isNeg = bal < -TH;
+    // Quy ước: "+" là đã NHẬN thanh toán, "-" là đã TRẢ thanh toán - ngược dấu
+    // với settlementsNet nội bộ (dùng cho công thức Balance). Không tô màu.
+    const displaySettled = -((settlementsNet && settlementsNet[m]) || 0);
 
     ctx.fillStyle = '#1A1A2E';
-    ctx.font = '500 14px -apple-system, sans-serif';
+    ctx.font = '500 13px -apple-system, sans-serif';
     ctx.fillText(m, COL1, y);
 
     ctx.textAlign = 'right';
-    ctx.font = '500 13px -apple-system, sans-serif';
+    ctx.font = '500 11px -apple-system, sans-serif';
     ctx.fillStyle = '#5F6275';
     ctx.fillText(fmtHome(paid[m] || 0, trip.homeCurrency), COL2, y);
     ctx.fillText(fmtHome(usage[m] || 0, trip.homeCurrency), COL3, y);
+    ctx.fillText(
+      Math.abs(displaySettled) > 0.5 ? (displaySettled > 0 ? '+' : '') + fmtHome(displaySettled, trip.homeCurrency) : '—',
+      COL4, y
+    );
     ctx.fillStyle = isPos ? '#1A9461' : isNeg ? '#D6453A' : '#9295B0';
     ctx.font = '600 14px -apple-system, sans-serif';
-    ctx.fillText((bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency || 'VND'), COL4, y);
+    ctx.fillText((bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency || 'VND'), COL5, y);
     ctx.textAlign = 'left';
     y += 26;
   });
@@ -1568,17 +1589,39 @@ function computeUsage(members, expenses) {
   return usage;
 }
 
-// Tổng số tiền mỗi người đã TRẢ RA (paidBy), không trừ phần chia của ai -
-// bao gồm cả khoản góp quỹ, vì đó cũng là tiền người đó đã bỏ ra.
-// Quan hệ: Đã chi - Đã dùng = Số dư (balances).
+// Tổng số tiền mỗi người đã bỏ ra CHO NHÓM (chi tiêu thật + góp quỹ), không trừ
+// phần chia của ai. KHÔNG tính khoản "payment" (thanh toán nợ cá nhân giữa 2
+// người) - vì đó không phải tiền chi cho nhóm, chỉ là tất toán công nợ riêng.
+// Quan hệ: Đã chi - Đã dùng ± Đã tất toán = Số dư (balances). Xem thêm
+// computeSettlementsNet() để lấy phần "Đã tất toán".
 function computePaid(members, expenses) {
   const paid = {};
   members.forEach(m => paid[m] = 0);
   expenses.forEach(exp => {
+    if (exp.category === 'payment') return;
     const amt = exp.amountVND ?? exp.amount;
     paid[exp.paidBy] = (paid[exp.paidBy] || 0) + amt;
   });
   return paid;
+}
+
+// Tính net dòng tiền "thanh toán nợ" (category 'payment') của mỗi người:
+// dương nếu họ đã TRẢ cho người khác (giảm nợ họ đang mắc), âm nếu họ đã
+// NHẬN thanh toán từ người khác (giảm số người khác nợ họ). Cộng vào công
+// thức Paid - Used để ra đúng Balance, giúp bảng "Tổng quan" luôn khớp số
+// dù người đó đã có giao dịch thanh toán hay chưa.
+function computeSettlementsNet(members, expenses) {
+  const net = {};
+  members.forEach(m => net[m] = 0);
+  expenses.forEach(exp => {
+    if (exp.category !== 'payment') return;
+    const amt = exp.amountVND ?? exp.amount;
+    net[exp.paidBy] = (net[exp.paidBy] || 0) + amt;
+    let splitMembers = exp.splitWith;
+    if (!Array.isArray(splitMembers)) splitMembers = parseMembers(splitMembers) || [];
+    splitMembers.forEach(m => { net[m] = (net[m] || 0) - amt; });
+  });
+  return net;
 }
 
 // Tách riêng số dư của "Quỹ chung" (tiền mặt) ra khỏi bảng số dư của người thật,
@@ -2284,6 +2327,7 @@ function buildTripExportRows(trip) {
   const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
   const usage = computeUsage(trip.members, expenses);
   const paid = computePaid(trip.members, expenses);
+  const settlementsNet = computeSettlementsNet(trip.members, expenses);
   const members = trip.members;
 
   let rows = [];
@@ -2310,12 +2354,16 @@ function buildTripExportRows(trip) {
   });
 
   rows.push([]);
-  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
+  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_settled'), t('export_col_bal')]);
   members.forEach(m => {
+    // Quy ước: dương = đã NHẬN thanh toán, âm = đã TRẢ thanh toán (ngược dấu với
+    // settlementsNet nội bộ, dùng cho công thức Paid - Used - Settled = Balance).
+    const displaySettled = -(settlementsNet[m] || 0);
     rows.push([
       m,
       roundCurrency(paid[m] || 0, trip.homeCurrency),
       roundCurrency(usage[m] || 0, trip.homeCurrency),
+      roundCurrency(displaySettled, trip.homeCurrency),
       roundCurrency(peopleBalances[m] || 0, trip.homeCurrency),
     ]);
   });
@@ -2757,6 +2805,7 @@ function render() {
     const workspacePaid = computePaid([...allMembers], allExpenses);
     const workspaceUsage = computeUsage([...allMembers], allExpenses);
     const workspaceBalances = computeBalances([...allMembers], allExpenses);
+    const workspaceSettlementsNet = computeSettlementsNet([...allMembers], allExpenses);
     
     // Build per-person summary
     const personSummary = [];
@@ -2764,6 +2813,7 @@ function render() {
       const paid = workspacePaid[member] || 0;
       const used = workspaceUsage[member] || 0;
       const balance = workspaceBalances[member] || 0;
+      const settledNet = workspaceSettlementsNet[member] || 0;
       const status = balance > 0.01 ? 'receive' : (balance < -0.01 ? 'owe' : 'settled');
       
       personSummary.push({
@@ -2771,6 +2821,7 @@ function render() {
         paid: paid,
         used: used,
         balance: balance,
+        settledNet: settledNet,
         status: status
       });
     });
@@ -2778,13 +2829,14 @@ function render() {
     // Sort by balance (highest first)
     personSummary.sort((a, b) => b.balance - a.balance);
     
-    // Render table with better responsive layout
+    // Render table with better responsive layout (dùng chung style với bảng per-trip)
     html += `<div style="overflow-x:auto;">
-      <div style="display:grid; grid-template-columns:1fr 110px 110px 140px; gap:10px; margin-bottom:12px; font-size:11px; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); padding-bottom:8px; padding-right:4px;">
-        <div>${appLang === 'vi' ? 'Thành viên' : 'Member'}</div>
-        <div style="text-align:right;">${appLang === 'vi' ? 'Đã trả' : 'Paid'}</div>
-        <div style="text-align:right;">${appLang === 'vi' ? 'Đã dùng' : 'Used'}</div>
-        <div style="text-align:right;">${appLang === 'vi' ? 'Số dư' : 'Balance'}</div>
+      <div class="overview-head-row">
+        <span>${appLang === 'vi' ? 'Thành viên' : 'Member'}</span>
+        <span class="overview-head-label">${t('col_paid')}</span>
+        <span class="overview-head-label">${t('col_used')}</span>
+        <span class="overview-head-label">${t('col_net_payment')}</span>
+        <span class="overview-head-label">${t('col_balance')}</span>
       </div>`;
     
     // Render rows
@@ -2792,20 +2844,28 @@ function render() {
       const statusText = p.status === 'receive' ? (appLang === 'vi' ? 'sẽ nhận' : 'receive') :
                          p.status === 'owe' ? (appLang === 'vi' ? 'còn nợ' : 'owes') :
                          (appLang === 'vi' ? 'đã thanh toán' : 'settled');
-      const statusColor = p.status === 'receive' ? 'var(--accent-text)' : 
-                          p.status === 'owe' ? '#EF4444' : '#22C55E';
+      const cls = p.status === 'receive' ? 'balance-pos' : p.status === 'owe' ? 'balance-neg' : '';
+      const sign = p.balance > 0 ? '+' : '';
+      // Quy ước: "+" là đã NHẬN thanh toán, "-" là đã TRẢ thanh toán - ngược dấu
+      // với p.settledNet (biến nội bộ dùng cho công thức Balance). Không tô
+      // màu riêng nữa, chỉ cần dấu +/- là đủ rõ.
+      const displaySettled = -(p.settledNet || 0);
+      const netPaymentCell = Math.abs(displaySettled) > 0.5
+        ? `${displaySettled > 0 ? '+' : ''}${fmtHome(displaySettled, ws.homeCurrency)}`
+        : '—';
       
-      html += `<div style="display:grid; grid-template-columns:1fr 110px 110px 140px; gap:10px; align-items:center; padding:8px; background:var(--surface-2); border-radius:var(--radius-sm); margin-bottom:6px;">
-        <div style="font-weight:500; font-size:13px;">${escapeHtml(p.name)}</div>
-        <div style="text-align:right; font-size:12px;">${Math.round(p.paid).toLocaleString(numLocale())}</div>
-        <div style="text-align:right; font-size:12px;">${Math.round(p.used).toLocaleString(numLocale())}</div>
-        <div style="text-align:right; font-weight:500; font-size:12px; color:${statusColor};">
-          ${p.balance > 0 ? '+' : ''}${Math.round(Math.abs(p.balance)).toLocaleString(numLocale())}<br><span style="font-size:10px; font-weight:normal; color:var(--text-secondary); display:block; margin-top:2px;">${statusText}</span>
-        </div>
-      </div>`;
+      html += `<div class="overview-row">
+        <span class="balance-name">${escapeHtml(p.name)}</span>
+        <span class="overview-val">${fmtHome(p.paid, ws.homeCurrency)}</span>
+        <span class="overview-val">${fmtHome(p.used, ws.homeCurrency)}</span>
+        <span class="overview-val-sub">${netPaymentCell}</span>
+        <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmtHome(Math.abs(p.balance), ws.homeCurrency)}</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:-4px; margin-bottom:4px;">${statusText}</div>`;
     });
     
     html += `</div>`;
+    html += `<div style="font-size:11.5px; color:var(--text-muted); margin-top:6px; padding-top:8px; border-top:1px solid var(--border);">${t('overview_note')}</div>`;
     
     html += `</div></div>`;
     
@@ -3034,6 +3094,7 @@ function render() {
 
       const usage = computeUsage(trip.members, expenses);
       const paid = computePaid(trip.members, expenses);
+      const settlementsNet = computeSettlementsNet(trip.members, expenses);
 
       html += `<div class="card">
         <div class="card-head"><span class="card-title">${t('overview_title')}</span></div>
@@ -3041,6 +3102,7 @@ function render() {
           <span></span>
           <span class="overview-head-label">${t('col_paid')}</span>
           <span class="overview-head-label">${t('col_used')}</span>
+          <span class="overview-head-label">${t('col_net_payment')}</span>
           <span class="overview-head-label">${t('col_balance')}</span>
         </div>`;
       trip.members.forEach(m => {
@@ -3049,10 +3111,18 @@ function render() {
         const cls = bal > TH ? 'balance-pos' : bal < -TH ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
         const note = bal > TH ? t('will_receive').replace(/[()]/g,'') : bal < -TH ? t('needs_to_pay').replace(/[()]/g,'') : t('settled').replace(/[()]/g,'');
+        // Quy ước hiển thị: "+" là đã NHẬN thanh toán, "-" là đã TRẢ thanh toán -
+        // ngược dấu với biến nội bộ settlementsNet (dùng cho công thức
+        // Paid - Used + settlementsNet = Balance). Không tô màu, chỉ dùng dấu +/-.
+        const displaySettled = -(settlementsNet[m] || 0);
+        const netPaymentCell = Math.abs(displaySettled) > 0.5
+          ? `${displaySettled > 0 ? '+' : ''}${fmtHome(displaySettled, trip.homeCurrency)}`
+          : '—';
         html += `<div class="overview-row">
           <span class="balance-name" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;" data-action="openMemberDetail" data-member="${escapeHtml(m)}" title="${t('view_member_detail_title')} ${escapeHtml(m)}">${escapeHtml(m)}</span>
           <span class="overview-val">${fmtHome(paid[m] || 0, trip.homeCurrency)}</span>
           <span class="overview-val">${fmtHome(usage[m] || 0, trip.homeCurrency)}</span>
+          <span class="overview-val-sub">${netPaymentCell}</span>
           <span class="overview-val ${cls}" style="font-weight:600;">${sign}${fmtHome(bal, trip.homeCurrency)}</span>
         </div>
         <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:-4px; margin-bottom:4px;">${note}</div>`;
@@ -3478,13 +3548,19 @@ function buildWorkspaceExportRows() {
     ]);
   });
 
+  const settlementsNet = computeSettlementsNet(members, allExpenses);
+
   rows.push([]);
-  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
+  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_settled'), t('export_col_bal')]);
   members.forEach(m => {
+    // Quy ước: dương = đã NHẬN thanh toán, âm = đã TRẢ thanh toán (ngược dấu với
+    // settlementsNet nội bộ).
+    const displaySettled = -(settlementsNet[m] || 0);
     rows.push([
       m,
       roundCurrency(paid[m] || 0, homeCurrency),
       roundCurrency(usage[m] || 0, homeCurrency),
+      roundCurrency(displaySettled, homeCurrency),
       roundCurrency(peopleBalances[m] || 0, homeCurrency),
     ]);
   });
@@ -3565,6 +3641,7 @@ function buildWorkspaceExportRows() {
     const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     const usage = computeUsage(trip.members, expenses);
     const paid = computePaid(trip.members, expenses);
+    const settlementsNet = computeSettlementsNet(trip.members, expenses);
 
     let text = `${t('export_summary_header')} - ${trip.name}\n\n`;
 
@@ -3576,17 +3653,20 @@ function buildWorkspaceExportRows() {
       text += `${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} ${t('copy_paid_word')} ${amountText}${ex.desc ? ' ' + t('copy_for_word') + ' ' + ex.desc : ''}\n`;
     });
 
-    // Bảng tổng quan 3 cột — pad bằng tab để thẳng hàng trong monospace font
+    // Bảng tổng quan — pad bằng tab để thẳng hàng trong monospace font
     text += `\n${t('overview_title')}:\n`;
     const maxNameLen = Math.max(...trip.members.map(m => m.length), 4);
     const pad = (s, n) => String(s).padEnd(n);
-    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${t('col_balance')}\n`;
+    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${pad(t('col_net_payment'), 12)}${t('col_balance')}\n`;
     trip.members.forEach(m => {
       const bal = roundCurrency(peopleBalances[m] || 0, trip.homeCurrency);
       const TH = settleThreshold(trip.homeCurrency);
       const note = bal > TH ? ` ${t('will_receive')}` : bal < -TH ? ` ${t('needs_to_pay')}` : ` ${t('settled')}`;
       const balStr = (bal > 0 ? '+' : '') + fmtHome(bal, trip.homeCurrency) + note;
-      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, trip.homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, trip.homeCurrency), 10)}${balStr}\n`;
+      // Quy ước: dương = đã nhận thanh toán, âm = đã trả (ngược dấu settlementsNet nội bộ)
+      const displaySettled = -(settlementsNet[m] || 0);
+      const settledStr = Math.abs(displaySettled) > 0.5 ? (displaySettled > 0 ? '+' : '') + fmtHome(displaySettled, trip.homeCurrency) : '—';
+      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, trip.homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, trip.homeCurrency), 10)}${pad(settledStr, 12)}${balStr}\n`;
     });
 
     // Quỹ tiền mặt chung
@@ -3612,6 +3692,7 @@ function buildWorkspaceExportRows() {
     const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(allExpenses);
     const settlements = getWorkspaceSettlements().settlements;
+    const settlementsNet = computeSettlementsNet(members, allExpenses);
     const netBalanceForCopy = {};
     settlements.forEach(s => {
       netBalanceForCopy[s.from] = (netBalanceForCopy[s.from] || 0) - s.amount;
@@ -3630,17 +3711,19 @@ function buildWorkspaceExportRows() {
       text += `[${ex.tripName || ''}] ${ex.date}${ex.time ? ' ' + ex.time : ''} [${categoryLabel(ex.category)}] ${ex.paidBy} ${t('copy_paid_word')} ${amountText}${ex.desc ? ' ' + t('copy_for_word') + ' ' + ex.desc : ''}\n`;
     });
 
-    // Bảng tổng quan 3 cột — pad bằng tab để thẳng hàng trong monospace font
+    // Bảng tổng quan — pad bằng tab để thẳng hàng trong monospace font
     text += `\n${t('overview_title')}:\n`;
     const maxNameLen = Math.max(...members.map(m => m.length), 4);
     const pad = (s, n) => String(s).padEnd(n);
-    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${t('col_balance')}\n`;
+    text += `${pad('', maxNameLen + 2)}${pad(t('col_paid'), 10)}${pad(t('col_used'), 10)}${pad(t('col_net_payment'), 12)}${t('col_balance')}\n`;
     members.forEach(m => {
       const bal = roundCurrency(peopleBalances[m] || 0, homeCurrency);
       const TH = settleThreshold(homeCurrency);
       const note = bal > TH ? ` ${t('will_receive')}` : bal < -TH ? ` ${t('needs_to_pay')}` : ` ${t('settled')}`;
       const balStr = (bal > 0 ? '+' : '') + fmtHome(bal, homeCurrency) + note;
-      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, homeCurrency), 10)}${balStr}\n`;
+      const displaySettled = -(settlementsNet[m] || 0);
+      const settledStr = Math.abs(displaySettled) > 0.5 ? (displaySettled > 0 ? '+' : '') + fmtHome(displaySettled, homeCurrency) : '—';
+      text += `${pad(m, maxNameLen + 2)}${pad(fmtHome(paid[m] || 0, homeCurrency), 10)}${pad(fmtHome(usage[m] || 0, homeCurrency), 10)}${pad(settledStr, 12)}${balStr}\n`;
     });
 
     // Quỹ tiền mặt chung
