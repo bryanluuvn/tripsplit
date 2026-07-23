@@ -582,6 +582,10 @@ const APP_TRANSLATIONS = {
     amount_hint_unit_prefix: '(đơn vị:',
     amount_placeholder_vnd: 'ví dụ 90 = 90.000đ',
     export_csv_aria: 'Xuất CSV',
+    export_sheets_aria: 'Xuất ra Google Sheets',
+    sheets_export_loading: 'Đang tạo Google Sheet...',
+    sheets_export_done: 'Đã xuất ra Google Sheets',
+    sheets_export_failed: 'Xuất Google Sheets thất bại, thử lại nhé',
     export_image_aria: 'Xuất ảnh tổng kết',
     transactions_involved: 'Giao dịch có phần',
     my_share_label: 'phần của tôi',
@@ -850,6 +854,10 @@ const APP_TRANSLATIONS = {
     amount_hint_unit_prefix: '(unit:',
     amount_placeholder_vnd: 'e.g. 90 = 90,000₫',
     export_csv_aria: 'Export CSV',
+    export_sheets_aria: 'Export to Google Sheets',
+    sheets_export_loading: 'Creating Google Sheet...',
+    sheets_export_done: 'Exported to Google Sheets',
+    sheets_export_failed: 'Google Sheets export failed, please try again',
     export_image_aria: 'Export summary image',
     transactions_involved: 'Transactions involved',
     my_share_label: 'my share',
@@ -2263,6 +2271,108 @@ function initTripDragSort() {
 // FIX: Aggregate trip settlements directly instead of recalculating from scratch
 // Gom dữ liệu từ TẤT CẢ trip đang hoạt động để phục vụ export CSV/ảnh ở tab "All Trips".
 // Mỗi expense được gắn thêm .tripName để phân biệt nguồn gốc khi xuất gộp nhiều trip.
+// Dựng mảng "rows" (2D array) cho 1 trip - dùng chung cho cả export CSV và
+// export Google Sheets, để không phải viết trùng logic 2 lần (tránh lệch nhau).
+function buildTripExportRows(trip) {
+  const expenses = getExpensesForTrip(trip);
+  const rawBalances = computeBalances(trip.members, expenses);
+  const { peopleBalances } = splitCashFundBalance(rawBalances);
+  const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+  const cashFundRemaining = computeCashFundRemaining(expenses);
+  const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
+  const usage = computeUsage(trip.members, expenses);
+  const paid = computePaid(trip.members, expenses);
+  const members = trip.members;
+
+  let rows = [];
+  rows.push([
+    t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
+    t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${trip.homeCurrency || 'VND'})`, t('export_col_split'),
+    ...members.map(m => `${t('export_member_share_prefix')} ${m} (${trip.homeCurrency || 'VND'})`),
+    t('csv_col_receipt'),
+  ]);
+  expenses.slice().reverse().forEach(ex => {
+    const isFund = ex.category === 'fund';
+    const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
+    const memberShares = members.map(m => {
+      if (isFund) return '';
+      return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, trip.homeCurrency) : '';
+    });
+    rows.push([
+      ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
+      ex.desc || '', ex.amount, ex.currency || (trip.homeCurrency || 'VND'), roundCurrency(ex.amountVND, trip.homeCurrency),
+      isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
+      ...memberShares,
+      ex.receiptUrl || '',
+    ]);
+  });
+
+  rows.push([]);
+  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
+  members.forEach(m => {
+    rows.push([
+      m,
+      roundCurrency(paid[m] || 0, trip.homeCurrency),
+      roundCurrency(usage[m] || 0, trip.homeCurrency),
+      roundCurrency(peopleBalances[m] || 0, trip.homeCurrency),
+    ]);
+  });
+
+  if (hasCashFund) {
+    rows.push([]);
+    rows.push([t('cash_fund_remaining')]);
+    cashFundRemaining.forEach(r => {
+      rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, trip.homeCurrency)]);
+    });
+  }
+
+  rows.push([]);
+  rows.push([t('settlement_title')]);
+  if (settlements.length === 0) {
+    rows.push([t('all_settled')]);
+  } else {
+    settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
+  }
+
+  return rows;
+}
+
+function csvEscapeVal(val) {
+  const s = String(val ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function downloadCsvRows(rows, filename) {
+  const csvContent = rows.map(r => r.map(csvEscapeVal).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function exportRowsToGoogleSheet(rows, title, scopeKey) {
+  showToast(t('sheets_export_loading'));
+  try {
+    const result = await apiPost({ action: 'exportToSheet', scope_key: scopeKey, title, rows });
+    if (result && result.url) {
+      window.open(result.url, '_blank');
+      showToast(t('sheets_export_done'));
+    } else {
+      showToast(t('sheets_export_failed'));
+    }
+  } catch (err) {
+    showToast(t('sheets_export_failed'));
+  }
+}
+
 function getWorkspaceExportData() {
   const activeTrips = getTripObjects().filter(t => !t.archived);
   const allMembers = new Set();
@@ -2654,6 +2764,7 @@ function render() {
           <div class="row" style="gap:6px;">
             <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
             <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+            <button class="icon-btn" data-action="exportToSheetWorkspace" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">📊</button>
             <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
           </div>
         </div>
@@ -2725,6 +2836,7 @@ function render() {
       <div class="row" style="justify-content:flex-end; gap:6px; margin-bottom:8px;">
         <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
         <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+        <button class="icon-btn" data-action="exportToSheetWorkspace" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">📊</button>
         <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
       </div>
       <p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>
@@ -2924,6 +3036,7 @@ function render() {
           <div class="row" style="gap:6px;">
             <button class="icon-btn" data-action="exportCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
             <button class="icon-btn" data-action="exportImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
+            <button class="icon-btn" data-action="exportToSheetTrip" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">📊</button>
             <button data-action="copySummary">📋 ${t('settlement_copy')}</button>
           </div>
         </div>`;
@@ -3291,99 +3404,89 @@ function handleAction(e) {
     generateSummaryImage(pseudoTrip, allExpenses, peopleBalances, settlements, hasCashFund ? cashFundRemaining : null, optimizedForImage);
   }
 
-  if (action === 'exportWorkspaceCsv') {
-    const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
-    const { peopleBalances } = splitCashFundBalance(balances);
-    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
-    const cashFundRemaining = computeCashFundRemaining(allExpenses);
-    const settlements = getWorkspaceSettlements().settlements;
+// Dựng mảng "rows" (2D array) cho toàn workspace (gộp mọi trip) - dùng chung
+// cho cả export CSV và export Google Sheets.
+function buildWorkspaceExportRows() {
+  const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
+  const { peopleBalances } = splitCashFundBalance(balances);
+  const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+  const cashFundRemaining = computeCashFundRemaining(allExpenses);
+  const settlements = getWorkspaceSettlements().settlements;
 
-    function csvEscape(val) {
-      const s = String(val ?? '');
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return '"' + s.replace(/"/g, '""') + '"';
-      }
-      return s;
-    }
-
-    let rows = [];
-    // ---- Raw data: có thêm cột Trip vì đây là gộp nhiều trip ----
+  let rows = [];
+  rows.push([
+    t('csv_col_trip'), t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
+    t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${homeCurrency || 'VND'})`, t('export_col_split'),
+    ...members.map(m => `${t('export_member_share_prefix')} ${m} (${homeCurrency || 'VND'})`),
+    t('csv_col_receipt'),
+  ]);
+  allExpenses.slice().reverse().forEach(ex => {
+    const isFund = ex.category === 'fund';
+    const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
+    const memberShares = members.map(m => {
+      if (isFund) return '';
+      return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, homeCurrency) : '';
+    });
     rows.push([
-      t('csv_col_trip'), t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
-      t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${homeCurrency || 'VND'})`, t('export_col_split'),
-      ...members.map(m => `${t('export_member_share_prefix')} ${m} (${homeCurrency || 'VND'})`),
-      t('csv_col_receipt'),
+      ex.tripName || '', ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
+      ex.desc || '', ex.amount, ex.currency || (homeCurrency || 'VND'), roundCurrency(ex.amountVND, homeCurrency),
+      isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
+      ...memberShares,
+      ex.receiptUrl || '',
     ]);
-    allExpenses.slice().reverse().forEach(ex => {
-      const isFund = ex.category === 'fund';
-      const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
-      const memberShares = members.map(m => {
-        if (isFund) return '';
-        return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, homeCurrency) : '';
-      });
-      rows.push([
-        ex.tripName || '', ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
-        ex.desc || '', ex.amount, ex.currency || (homeCurrency || 'VND'), roundCurrency(ex.amountVND, homeCurrency),
-        isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
-        ...memberShares,
-        ex.receiptUrl || '',
-      ]);
-    });
+  });
 
-    // ---- Tổng quan từng người ----
+  rows.push([]);
+  rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
+  members.forEach(m => {
+    rows.push([
+      m,
+      roundCurrency(paid[m] || 0, homeCurrency),
+      roundCurrency(usage[m] || 0, homeCurrency),
+      roundCurrency(peopleBalances[m] || 0, homeCurrency),
+    ]);
+  });
+
+  if (hasCashFund) {
     rows.push([]);
-    rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
-    members.forEach(m => {
-      rows.push([
-        m,
-        roundCurrency(paid[m] || 0, homeCurrency),
-        roundCurrency(usage[m] || 0, homeCurrency),
-        roundCurrency(peopleBalances[m] || 0, homeCurrency),
-      ]);
+    rows.push([t('cash_fund_remaining')]);
+    cashFundRemaining.forEach(r => {
+      rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, homeCurrency)]);
     });
+  }
 
-    // ---- Quỹ tiền mặt chung ----
-    if (hasCashFund) {
-      rows.push([]);
-      rows.push([t('cash_fund_remaining')]);
-      cashFundRemaining.forEach(r => {
-        rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, homeCurrency)]);
-      });
-    }
+  rows.push([]);
+  rows.push([t('settlement_title')]);
+  if (settlements.length === 0) {
+    rows.push([t('all_settled')]);
+  } else {
+    settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
+  }
 
-    // ---- Kết quả thanh toán ----
+  const netBalanceForExport = {};
+  settlements.forEach(s => {
+    netBalanceForExport[s.from] = (netBalanceForExport[s.from] || 0) - s.amount;
+    netBalanceForExport[s.to] = (netBalanceForExport[s.to] || 0) + s.amount;
+  });
+  const optimizedForExport = simplifyDebts(netBalanceForExport, homeCurrency);
+  if (optimizedForExport.length > 0 && optimizedForExport.length < settlements.length) {
     rows.push([]);
-    rows.push([t('settlement_title')]);
-    if (settlements.length === 0) {
-      rows.push([t('all_settled')]);
-    } else {
-      settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
-    }
+    rows.push([appLang === 'vi' ? 'Cách chuyển tiền tối ưu (manual)' : 'Optimized Transfer (Manual)']);
+    optimizedForExport.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
+  }
 
-    // ---- Cách chuyển tiền tối ưu (nếu gộp được ít giao dịch hơn) ----
-    const netBalanceForExport = {};
-    settlements.forEach(s => {
-      netBalanceForExport[s.from] = (netBalanceForExport[s.from] || 0) - s.amount;
-      netBalanceForExport[s.to] = (netBalanceForExport[s.to] || 0) + s.amount;
-    });
-    const optimizedForExport = simplifyDebts(netBalanceForExport, homeCurrency);
-    if (optimizedForExport.length > 0 && optimizedForExport.length < settlements.length) {
-      rows.push([]);
-      rows.push([appLang === 'vi' ? 'Cách chuyển tiền tối ưu (manual)' : 'Optimized Transfer (Manual)']);
-      optimizedForExport.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
-    }
+  return rows;
+}
 
-    const csvContent = rows.map(r => r.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${String(t('workspace_summary') || 'All-Trips').replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  if (action === 'exportWorkspaceCsv') {
+    const rows = buildWorkspaceExportRows();
+    downloadCsvRows(rows, `${String(t('workspace_summary') || 'All-Trips').replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`);
     showToast(t('toast_csv_done'));
+  }
+
+  if (action === 'exportToSheetWorkspace') {
+    const rows = buildWorkspaceExportRows();
+    exportRowsToGoogleSheet(rows, `TripSplit - ${t('workspace_summary') || 'All Trips'}`, '__WORKSPACE__');
   }
 
   if (action === 'exportImage') {
@@ -3399,92 +3502,15 @@ function handleAction(e) {
 
   if (action === 'exportCsv') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const expenses = getExpensesForTrip(trip);
-    const rawBalances = computeBalances(trip.members, expenses);
-    const { peopleBalances } = splitCashFundBalance(rawBalances);
-    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
-    const cashFundRemaining = computeCashFundRemaining(expenses);
-    const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
-    const usage = computeUsage(trip.members, expenses);
-    const paid = computePaid(trip.members, expenses);
-
-    function csvEscape(val) {
-      const s = String(val ?? '');
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return '"' + s.replace(/"/g, '""') + '"';
-      }
-      return s;
-    }
-
-    const members = trip.members;
-
-    let rows = [];
-    // ---- Raw data: header + cột động theo từng thành viên ----
-    rows.push([
-      t('csv_col_date'), t('csv_col_time'), t('csv_col_category'), t('csv_col_payer'), t('csv_col_desc'),
-      t('export_col_orig_amount'), t('export_col_orig_unit'), `${t('export_col_home_amount')} (${trip.homeCurrency || 'VND'})`, t('export_col_split'),
-      ...members.map(m => `${t('export_member_share_prefix')} ${m} (${trip.homeCurrency || 'VND'})`),
-      t('csv_col_receipt'),
-    ]);
-    expenses.slice().reverse().forEach(ex => {
-      const isFund = ex.category === 'fund';
-      const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
-      const share = ex.amountVND / splitMembers.length;
-      // Mỗi thành viên: nếu có phần trong giao dịch này thì điền số tiền, không thì rỗng
-      const memberShares = members.map(m => {
-        if (isFund) return '';
-        return splitMembers.includes(m) ? roundCurrency(ex.amountHome / splitMembers.length, trip.homeCurrency) : '';
-      });
-      rows.push([
-        ex.date, ex.time || '', categoryLabel(ex.category), ex.paidBy,
-        ex.desc || '', ex.amount, ex.currency || (trip.homeCurrency || 'VND'), roundCurrency(ex.amountVND, trip.homeCurrency),
-        isFund ? t('export_no_split') : (ex.splitWith.length > 0 ? ex.splitWith.join(' | ') : t('split_with_everyone')),
-        ...memberShares,
-        ex.receiptUrl || '',
-      ]);
-    });
-
-    // ---- Tổng quan từng người: 4 cột ----
-    rows.push([]);
-    rows.push([t('overview_title'), t('export_col_paid'), t('export_col_used'), t('export_col_bal')]);
-    members.forEach(m => {
-      rows.push([
-        m,
-        roundCurrency(paid[m] || 0, trip.homeCurrency),
-        roundCurrency(usage[m] || 0, trip.homeCurrency),
-        roundCurrency(peopleBalances[m] || 0, trip.homeCurrency),
-      ]);
-    });
-
-    // ---- Quỹ tiền mặt chung ----
-    if (hasCashFund) {
-      rows.push([]);
-      rows.push([t('cash_fund_remaining')]);
-      cashFundRemaining.forEach(r => {
-        rows.push([`${t('remaining_label')} (${r.label})`, r.currency ? r.remaining : roundCurrency(r.remaining, trip.homeCurrency)]);
-      });
-    }
-
-    // ---- Kết quả thanh toán ----
-    rows.push([]);
-    rows.push([t('settlement_title')]);
-    if (settlements.length === 0) {
-      rows.push([t('all_settled')]);
-    } else {
-      settlements.forEach(s => rows.push([s.from, t('export_transfers_for'), s.to, s.amount]));
-    }
-
-    const csvContent = rows.map(r => r.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const rows = buildTripExportRows(trip);
+    downloadCsvRows(rows, `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}.csv`);
     showToast(t('toast_csv_done'));
+  }
+
+  if (action === 'exportToSheetTrip') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const rows = buildTripExportRows(trip);
+    exportRowsToGoogleSheet(rows, `TripSplit - ${trip.name}`, trip.trip_id);
   }
 
   if (action === 'copySummary') {
