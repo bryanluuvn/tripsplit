@@ -2563,7 +2563,7 @@ function getWorkspaceSettlements() {
 }
 
 // Get settlement details for workspace settling dialog
-function getWorkspaceSettlementDetails(fromMember, toMember, amount) {
+function getWorkspaceSettlementDetails(fromMember, toMember) {
   const result = [];
   
   // Find all relevant settlements across trips
@@ -2578,16 +2578,24 @@ function getWorkspaceSettlementDetails(fromMember, toMember, amount) {
     const rawBalances = computeBalances(trip.members, tripExpenses);
     const settlements = simplifyDebts(rawBalances, trip.homeCurrency);
     
-    const relevant = settlements.find(s => 
-      s.from === fromMember && s.to === toMember
-    );
-    
-    if (relevant && relevant.amount > 0.01) {
+    // Chiều thuận: fromMember nợ toMember trong trip này
+    const forward = settlements.find(s => s.from === fromMember && s.to === toMember);
+    if (forward && forward.amount > 0.01) {
       result.push({
-        tripId: trip.trip_id,
-        tripName: trip.name,
-        amount: relevant.amount,
-        homeCurrency: trip.homeCurrency
+        tripId: trip.trip_id, tripName: trip.name, amount: forward.amount,
+        homeCurrency: trip.homeCurrency, payer: fromMember, receiver: toMember,
+      });
+    }
+    
+    // Chiều ngược: toMember lại nợ fromMember trong CHÍNH trip này - vẫn phải tạo
+    // thanh toán đúng chiều đó, KHÔNG được bỏ qua. Vì số dư tổng ở workspace đã
+    // bù trừ (net) khoản này rồi, nếu không tạo thanh toán riêng cho trip này thì
+    // công nợ ở trip đó sẽ không bao giờ được coi là đã thanh toán.
+    const reverse = settlements.find(s => s.from === toMember && s.to === fromMember);
+    if (reverse && reverse.amount > 0.01) {
+      result.push({
+        tripId: trip.trip_id, tripName: trip.name, amount: reverse.amount,
+        homeCurrency: trip.homeCurrency, payer: toMember, receiver: fromMember,
       });
     }
   });
@@ -3221,8 +3229,8 @@ function handleAction(e) {
     const to = e.currentTarget.dataset.to;
     const totalAmount = parseFloat(e.currentTarget.dataset.amount);
     
-    // Get settlement details for this pair across trips
-    const details = getWorkspaceSettlementDetails(from, to, totalAmount);
+    // Get settlement details for this pair across trips (bao gồm cả chiều ngược)
+    const details = getWorkspaceSettlementDetails(from, to);
     
     const overlay = document.createElement('div');
     overlay.id = 'settleDialogOverlay';
@@ -3232,7 +3240,7 @@ function handleAction(e) {
       <div style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
         <input type="number" id="settle_trip_${idx}" value="${d.amount}" 
                style="flex:1; padding:8px; border:1px solid var(--border); border-radius:var(--radius-sm);">
-        <span style="font-size:13px; min-width:120px;">${escapeHtml(d.tripName)}</span>
+        <span style="font-size:12px; min-width:130px; color:var(--text-secondary);">${escapeHtml(d.payer)} → ${escapeHtml(d.receiver)} · ${escapeHtml(d.tripName)}</span>
       </div>
     `).join('');
     
@@ -4409,11 +4417,11 @@ window.app = {
   },
 
   confirmWorkspaceSettle(from, to, tripCount) {
-    const details = getWorkspaceSettlementDetails(from, to, 0);
+    const details = getWorkspaceSettlementDetails(from, to);
     const now = new Date();
     let anyAdded = false;
     
-    // Read user inputs from dialog and create payments
+    // Đọc số tiền người dùng nhập trong dialog và tạo thanh toán cho từng dòng
     details.forEach((d, idx) => {
       const input = document.getElementById(`settle_trip_${idx}`);
       if (!input) return;
@@ -4421,22 +4429,26 @@ window.app = {
       const amount = parseFloat(input.value);
       if (amount <= 0) return;
       
-      // Create payment transaction for this trip
+      // Dùng đúng payer/receiver của TỪNG dòng (có thể ngược chiều nhau giữa các
+      // trip khác nhau) - không dùng chung from/to của cả cặp workspace.
       const expenseData = {
         expense_id: uid(),
         trip_id: d.tripId,
-        paid_by: from,
+        paid_by: d.payer,
         amount,
         currency: '',
-        desc: `${t('auto_payment_desc_prefix')} ${to}`,
-        split_with: to, // Just the recipient name
+        desc: `${t('auto_payment_desc_prefix')} ${d.receiver}`,
+        split_with: d.receiver,
         date: now.toISOString().slice(0, 10),
         time: nowTimeStr(),
         category: 'payment',
       };
       
-      // Add locally
-      rawExpenses.push({ ...expenseData });
+      // Đồng bộ lên server (trước đây chỉ lưu tạm local, mất khi tải lại trang)
+      withSaving(
+        () => { rawExpenses.push({ ...expenseData }); },
+        () => apiPost({ action: 'addExpense', ...expenseData })
+      );
       anyAdded = true;
     });
     
@@ -4446,11 +4458,8 @@ window.app = {
       return;
     }
     
-    // Save offline + refresh UI
-    saveOffline(rawTrips, rawExpenses);
     document.getElementById('settleDialogOverlay')?.remove();
     showToast(`${from} → ${to}: ${appLang === 'vi' ? 'Đã tạo thanh toán' : 'Payment created'}`);
-    render();
   },
 
   payAllWorkspaceSettlements() {
@@ -4469,19 +4478,20 @@ window.app = {
     
     // Create and sync each payment like markSettled does
     ws.settlements.forEach(s => {
-      const details = getWorkspaceSettlementDetails(s.from, s.to, s.amount);
+      const details = getWorkspaceSettlementDetails(s.from, s.to);
       
       details.forEach(d => {
         if (!d.tripId || d.amount <= 0) return;
         
+        // Dùng đúng payer/receiver của từng dòng (có thể ngược chiều giữa các trip)
         const expenseData = {
           expense_id: uid(),
           trip_id: d.tripId,
-          paid_by: s.from,
+          paid_by: d.payer,
           amount: Math.round(d.amount),
           currency: '',
-          desc: `${t('auto_payment_desc_prefix')} ${s.to}`,
-          split_with: s.to,
+          desc: `${t('auto_payment_desc_prefix')} ${d.receiver}`,
+          split_with: d.receiver,
           date: now.toISOString().slice(0, 10),
           time: nowTimeStr(),
           category: 'payment'
