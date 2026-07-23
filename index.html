@@ -519,7 +519,7 @@ const APP_TRANSLATIONS = {
     overview_balance: 'SỐ DƯ',
     overview_note: 'Đã chi − Đã dùng = Số dư. "Đã dùng" không tính tiền góp quỹ.',
     overview_tap_hint: '👆 Bấm vào tên để xem chi tiết giao dịch của từng người',
-    settlement_copy: 'Copy để gửi',
+    settlement_copy: 'Copy dạng text',
     btn_archive: 'Lưu trữ trip',
     btn_unarchive: 'Bỏ lưu trữ',
     btn_delete_trip: 'Xóa trip này',
@@ -583,6 +583,8 @@ const APP_TRANSLATIONS = {
     amount_placeholder_vnd: 'ví dụ 90 = 90.000đ',
     export_csv_aria: 'Xuất CSV',
     export_sheets_aria: 'Xuất ra Google Sheets',
+    export_share_label: 'Xuất / chia sẻ kết quả',
+    export_share_btn: 'Xuất / Chia sẻ',
     sheets_export_loading: 'Đang tạo Google Sheet...',
     sheets_export_done: 'Đã xuất ra Google Sheets',
     sheets_export_failed: 'Xuất Google Sheets thất bại, thử lại nhé',
@@ -794,7 +796,7 @@ const APP_TRANSLATIONS = {
     overview_balance: 'BALANCE',
     overview_note: 'Paid − Used = Balance. \"Used\" excludes fund contributions.',
     overview_tap_hint: '👆 Tap a name to see their detailed transactions',
-    settlement_copy: 'Copy to share',
+    settlement_copy: 'Copy as text',
     btn_archive: 'Archive trip',
     btn_unarchive: 'Unarchive',
     btn_delete_trip: 'Delete trip',
@@ -856,6 +858,8 @@ const APP_TRANSLATIONS = {
     amount_placeholder_vnd: 'e.g. 90 = 90,000₫',
     export_csv_aria: 'Export CSV',
     export_sheets_aria: 'Export to Google Sheets',
+    export_share_label: 'Export / share results',
+    export_share_btn: 'Export / Share',
     sheets_export_loading: 'Creating Google Sheet...',
     sheets_export_done: 'Exported to Google Sheets',
     sheets_export_failed: 'Google Sheets export failed, please try again',
@@ -2806,12 +2810,7 @@ function render() {
       html += `<div class="card" id="settlementCard">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
-          <div class="row" style="gap:6px;">
-            <button class="icon-btn" data-action="exportToSheetWorkspace" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">${sheetsIconSvg()}</button>
-            <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
-            <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
-            <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
-          </div>
+          <button data-action="openExportMenu" data-scope="workspace" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
         </div>
         <div class="card-body">`;
       
@@ -2878,11 +2877,8 @@ function render() {
       }
     } else {
       html += `<div id="settlementCard">
-      <div class="row" style="justify-content:flex-end; gap:6px; margin-bottom:8px;">
-        <button class="icon-btn" data-action="exportToSheetWorkspace" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">${sheetsIconSvg()}</button>
-        <button class="icon-btn" data-action="exportWorkspaceImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
-        <button class="icon-btn" data-action="exportWorkspaceCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
-        <button data-action="copyWorkspaceSummary">📋 ${t('settlement_copy')}</button>
+      <div class="row" style="justify-content:flex-end; margin-bottom:8px;">
+        <button data-action="openExportMenu" data-scope="workspace" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
       </div>
       <p class="empty" style="padding:20px; text-align:center;">${appLang === 'vi' ? 'Tất cả đã thanh toán ✓' : 'All settled ✓'}</p>
       </div>`;
@@ -3078,12 +3074,7 @@ function render() {
       html += `<div class="card" id="settlementCard">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
-          <div class="row" style="gap:6px;">
-            <button class="icon-btn" data-action="exportToSheetTrip" aria-label="${t('export_sheets_aria')}" title="${t('export_sheets_aria')}">${sheetsIconSvg()}</button>
-            <button class="icon-btn" data-action="exportImage" aria-label="${t('export_image_aria')}" title="${t('export_image_aria')}">🖼️</button>
-            <button class="icon-btn" data-action="exportCsv" aria-label="${t('export_csv_aria')}" title="${t('export_csv_aria')}">⬇️</button>
-            <button data-action="copySummary">📋 ${t('settlement_copy')}</button>
-          </div>
+          <button data-action="openExportMenu" data-scope="trip" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
         </div>`;
       if (settlements.length === 0) {
         html += `<p class="empty">${t('all_settled_full')}</p>`;
@@ -3220,12 +3211,14 @@ function handleAction(e) {
   const member = e.currentTarget.dataset.member;
   const url = e.currentTarget.dataset.url;
   const payload = e.currentTarget.dataset.payload;
+  const scope = e.currentTarget.dataset.scope;
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
   if (action === 'viewReceipt') { window.app.viewReceipt(url); return; }
   if (action === 'restoreExpense') { window.app.restoreExpense(payload); return; }
   if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
   if (action === 'quickAddMember') { window.app.addMember(name); return; }
+  if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
 
   if (action === 'openWorkspaceSettleDialog') {
     const from = e.currentTarget.dataset.from;
@@ -4029,6 +4022,40 @@ window.app = {
   scrollToSettlement() {
     const el = document.getElementById('settlementCard');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
+
+  openExportMenu(scope) {
+    const existing = document.getElementById('exportMenuOverlay');
+    if (existing) existing.remove();
+
+    const itemStyle = 'width:100%; display:flex; align-items:center; justify-content:flex-start; gap:10px; margin-bottom:8px; font-size:14px;';
+    const overlay = document.createElement('div');
+    overlay.id = 'exportMenuOverlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="max-width:340px;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+        <h2 style="margin:0;">${t('export_share_label')}</h2>
+        <button class="icon-btn" onclick="this.closest('.modal-overlay').remove()" aria-label="${t('aria_close')}">✕</button>
+      </div>
+      <button style="${itemStyle}" onclick="window.app.runExportMenuItem('sheets','${scope}')">${sheetsIconSvg()}<span>${t('export_sheets_aria')}</span></button>
+      <button style="${itemStyle}" onclick="window.app.runExportMenuItem('image','${scope}')">🖼️<span>${t('export_image_aria')}</span></button>
+      <button style="${itemStyle}" onclick="window.app.runExportMenuItem('csv','${scope}')">⬇️<span>${t('export_csv_aria')}</span></button>
+      <button style="${itemStyle} margin-bottom:0;" onclick="window.app.runExportMenuItem('copy','${scope}')">📋<span>${t('settlement_copy')}</span></button>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  },
+
+  runExportMenuItem(kind, scope) {
+    const overlay = document.getElementById('exportMenuOverlay');
+    if (overlay) overlay.remove();
+    const actionMap = {
+      trip: { sheets: 'exportToSheetTrip', image: 'exportImage', csv: 'exportCsv', copy: 'copySummary' },
+      workspace: { sheets: 'exportToSheetWorkspace', image: 'exportWorkspaceImage', csv: 'exportWorkspaceCsv', copy: 'copyWorkspaceSummary' },
+    };
+    const action = actionMap[scope] && actionMap[scope][kind];
+    if (!action) return;
+    handleAction({ currentTarget: { dataset: { action } } });
   },
 
   openLastSheetExport() {
