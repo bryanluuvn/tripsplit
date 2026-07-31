@@ -63,7 +63,7 @@
       var(--bg);
     background-attachment: fixed;
     color: var(--text-primary);
-    padding: 1.25rem 1rem 3rem;
+    padding: 1.25rem 1rem calc(5.5rem + env(safe-area-inset-bottom, 0px));
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
@@ -145,10 +145,12 @@
   button.primary:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
   button.ghost { border: none; background: none; color: var(--text-muted); padding: 4px; height: auto; }
 
-  #jumpToSettlementBtn, #scrollToTopBtn { transition: all 0.12s ease; }
-  #jumpToSettlementBtn:hover { background: var(--blue-dark); }
-  #jumpToSettlementBtn:active, #scrollToTopBtn:active { transform: scale(0.94); }
+  #scrollToTopBtn { transition: all 0.12s ease; }
+  #scrollToTopBtn:active { transform: scale(0.94); }
   #scrollToTopBtn:hover { background: var(--surface-2); color: var(--text-primary); }
+  .bottom-nav-btn { transition: color 0.12s ease, transform 0.1s ease; }
+  .bottom-nav-btn:active { transform: scale(0.92); }
+  .bottom-nav-btn.active { color: var(--blue, #4A6CF7) !important; }
 
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
@@ -373,20 +375,41 @@
     </div>
   </div>
   <div id="app"></div>
-  <button id="jumpToSettlementBtn" onclick="window.app.scrollToSettlement()" aria-label="Jump to settlement" title="Jump to settlement" style="
-    display:none; position:fixed; bottom:20px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
-    width:46px; height:46px; border-radius:50%; border:none;
-    background:var(--blue, #4A6CF7); color:#fff; font-size:19px;
-    align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(74,108,247,0.35);
-    cursor:pointer;
-  ">💰</button>
   <button id="scrollToTopBtn" onclick="window.app.scrollToTop()" aria-label="Scroll to top" title="Scroll to top" style="
-    display:none; position:fixed; bottom:76px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
+    display:none; position:fixed; bottom:80px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
     width:46px; height:46px; border-radius:50%; border:1.5px solid var(--border-strong, #CBCFE8);
     background:var(--surface, #fff); color:var(--text-muted, #9295B0); font-size:16px;
     align-items:center; justify-content:center; box-shadow:var(--shadow-card, 0 1px 8px rgba(26,26,46,0.06));
     cursor:pointer;
   ">↑</button>
+
+  <nav id="bottomNav" style="
+    position:fixed; left:0; right:0; bottom:0; z-index:45;
+    display:flex; justify-content:center;
+    background:var(--surface, #fff); border-top:1px solid var(--border, #E4E5F0);
+    box-shadow:0 -2px 12px rgba(26,26,46,0.06);
+    padding-bottom:env(safe-area-inset-bottom, 0);
+  ">
+    <div style="width:100%; max-width:512px; display:flex; align-items:center; justify-content:space-around; height:60px; padding:0 6px;">
+      <button class="bottom-nav-btn" onclick="window.app.navGoToTrip()" aria-label="Trip" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:19px;">🏠</span>
+      </button>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToWorkspace()" aria-label="All Trips" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:19px;">📊</span>
+      </button>
+      <button class="bottom-nav-btn" onclick="window.app.navQuickAddExpense()" aria-label="Add expense" style="
+        background:var(--blue, #4A6CF7); border:none; width:50px; height:50px; border-radius:50%;
+        display:flex; align-items:center; justify-content:center; cursor:pointer; color:#fff;
+        font-size:24px; box-shadow:0 3px 10px rgba(74,108,247,0.4); margin:0 4px; flex-shrink:0;
+      ">＋</button>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToSettlement()" aria-label="Settlement" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:19px;">💰</span>
+      </button>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToHistory()" aria-label="History" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:19px;">📜</span>
+      </button>
+    </div>
+  </nav>
 </div>
 
 <script>
@@ -512,6 +535,20 @@ const APP_TRANSLATIONS = {
     members_section: 'THÀNH VIÊN',
     filter_all_cat: 'Tất cả loại',
     filter_total: 'Tổng (đã lọc)',
+    filter_date_all: 'Tất cả',
+    filter_date_last7: '7 ngày qua',
+    filter_date_last30: '30 ngày qua',
+    filter_date_week: 'Tuần này',
+    filter_date_lastweek: 'Tuần trước',
+    filter_date_month: 'Tháng này',
+    filter_date_lastmonth: 'Tháng trước',
+    filter_date_custom: 'Tùy chỉnh...',
+    filter_date_from: 'Từ ngày',
+    filter_date_to: 'Đến ngày',
+    filter_date_note: 'Lọc theo thời gian cũng áp dụng cho bảng Tổng quan và biểu đồ bên dưới (không áp dụng cho Kết quả chia tiền).',
+    pagination_prev: '‹ Trước',
+    pagination_next: 'Sau ›',
+    pagination_page_label: 'Trang',
     save_changes_btn: 'Lưu thay đổi',
     expense_paid_for: 'trả cho',
     expense_paid: 'đã trả',
@@ -791,6 +828,20 @@ const APP_TRANSLATIONS = {
     members_section: 'MEMBERS',
     filter_all_cat: 'All categories',
     filter_total: 'Total (filtered)',
+    filter_date_all: 'All',
+    filter_date_last7: 'Last 7 days',
+    filter_date_last30: 'Last 30 days',
+    filter_date_week: 'This week',
+    filter_date_lastweek: 'Last week',
+    filter_date_month: 'This month',
+    filter_date_lastmonth: 'Last month',
+    filter_date_custom: 'Custom...',
+    filter_date_from: 'From',
+    filter_date_to: 'To',
+    filter_date_note: 'The time filter also applies to the Overview table and charts below (not to the Settlement plan).',
+    pagination_prev: '‹ Prev',
+    pagination_next: 'Next ›',
+    pagination_page_label: 'Page',
     save_changes_btn: 'Save changes',
     expense_paid_for: 'paid for',
     expense_paid: 'paid',
@@ -1959,6 +2010,7 @@ let rawExpenses = [];  // raw rows từ Sheet Expenses
 let rawActivityLog = []; // raw rows từ Sheet ActivityLog
 let tripOrder = [];    // Custom trip order (trip_id array) - persisted in localStorage
 let activeTripId = null;
+let lastRealTripId = null; // trip cụ thể gần nhất đang xem (khác WORKSPACE/HISTORY) - dùng cho bottom nav
 let modal = null;
 let expDraft = { id: null, paidBy: '', amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [], date: '', time: '', category: '', receiptPreview: null, receiptData: null, receiptMime: null, removeReceipt: false };
 let memberInput = '';
@@ -1975,7 +2027,71 @@ let renameTripHomeCurrency = 'VND';
 let renameTripRate = '';
 let renameTripCustomCurrency = '';
 let editMemberDraft = { oldName: '', newName: '' };
-let expenseFilter = { person: '', category: '' };
+let expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+let expensePage = 1;
+const EXPENSES_PER_PAGE = 10;
+
+// Áp dụng TẤT CẢ filter đang bật (người trả/loại/thời gian) lên 1 danh sách
+// expense - dùng chung cho cả danh sách chi tiêu lẫn 2 biểu đồ bên dưới, để
+// không bị lệch nhau (biểu đồ trước đây quên áp dụng filter).
+function filterExpensesForView(expenses) {
+  return expenses.filter(e => {
+    if (expenseFilter.person && e.paidBy !== expenseFilter.person) return false;
+    if (expenseFilter.category) {
+      const wantNone = expenseFilter.category === '__none__';
+      if (wantNone ? e.category : e.category !== expenseFilter.category) return false;
+    }
+    if (expenseFilter.dateFrom && e.date < expenseFilter.dateFrom) return false;
+    if (expenseFilter.dateTo && e.date > expenseFilter.dateTo) return false;
+    return true;
+  });
+}
+
+// Trả về ngày hôm nay theo local time dạng YYYY-MM-DD (dùng cho preset lọc)
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function dateToISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Áp dụng preset khoảng thời gian, trả về {from, to} dạng YYYY-MM-DD
+function computeDatePreset(preset) {
+  const now = new Date();
+  const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+
+  if (preset === 'last7') {
+    return { from: dateToISO(addDays(now, -6)), to: todayISO() };
+  }
+  if (preset === 'last30') {
+    return { from: dateToISO(addDays(now, -29)), to: todayISO() };
+  }
+  if (preset === 'week') {
+    // Tuần bắt đầu từ Thứ 2 (quy ước phổ biến ở VN)
+    const day = now.getDay(); // 0=CN, 1=T2...
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    const monday = addDays(now, diffToMonday);
+    return { from: dateToISO(monday), to: todayISO() };
+  }
+  if (preset === 'lastweek') {
+    const day = now.getDay();
+    const diffToThisMonday = (day === 0 ? -6 : 1 - day);
+    const thisMonday = addDays(now, diffToThisMonday);
+    const lastMonday = addDays(thisMonday, -7);
+    const lastSunday = addDays(thisMonday, -1);
+    return { from: dateToISO(lastMonday), to: dateToISO(lastSunday) };
+  }
+  if (preset === 'month') {
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: dateToISO(firstOfMonth), to: todayISO() };
+  }
+  if (preset === 'lastmonth') {
+    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: dateToISO(firstOfLastMonth), to: dateToISO(lastOfLastMonth) };
+  }
+  return { from: '', to: '' }; // 'all'
+}
 let showArchivedList = false;
 let isLoading = true;
 let loadError = null;
@@ -2132,6 +2248,7 @@ async function refreshData(showSpinner) {
       const firstActive = rawTrips.find(t => !(t.archived === 'true' || t.archived === true));
       activeTripId = firstActive ? firstActive.trip_id : rawTrips[0].trip_id;
     }
+    if (activeTripId && activeTripId !== 'WORKSPACE' && activeTripId !== 'HISTORY') lastRealTripId = activeTripId;
     loadError = null;
     setSyncDot('ok');
   } catch (err) {
@@ -2499,6 +2616,11 @@ function getWorkspaceSettlements() {
       };
     }
     
+    // Tính sớm để dùng đúng ngưỡng "coi như đã hòa" theo loại tiền tệ (settleThreshold)
+    // thay vì hardcode 0.01 - với VNĐ ngưỡng đúng là 1đ, không phải 0.01đ.
+    const homeCurrency = activeTrips[0].homeCurrency;
+    const TH = settleThreshold(homeCurrency);
+    
     // Get all members from active trips (auto-detect via getExpensesForTrip fallback)
     const allMembers = new Set();
     activeTrips.forEach(trip => {
@@ -2546,7 +2668,7 @@ function getWorkspaceSettlements() {
       const [from, to] = key.split('→');
       return { from, to, amount };
     })
-    .filter(s => s.amount > 0.01);
+    .filter(s => s.amount > TH);
   
   // CRITICAL FIX: Merge bidirectional debts ONLY (not recalculate)
   // E.g., if both Phong→Bành 392 AND Bành→Phong 1454 exist
@@ -2565,9 +2687,9 @@ function getWorkspaceSettlements() {
     if (reverse) {
       // Merge bidirectional
       const net = s.amount - reverse.amount;
-      if (net > 0.01) {
+      if (net > TH) {
         merged[`${s.from}→${s.to}`] = net;
-      } else if (net < -0.01) {
+      } else if (net < -TH) {
         merged[`${s.to}→${s.from}`] = Math.abs(net);
       }
       processed.add(`${s.from}→${s.to}`);
@@ -2585,7 +2707,7 @@ function getWorkspaceSettlements() {
       const [from, to] = key.split('→');
       return { from, to, amount };
     })
-    .filter(s => s.amount > 0.01);
+    .filter(s => s.amount > TH);
   
   // Get total spent
   let totalSpent = 0;
@@ -2598,9 +2720,6 @@ function getWorkspaceSettlements() {
       }
     });
   });
-  
-  // Get homeCurrency from first trip
-  const homeCurrency = activeTrips.length > 0 ? activeTrips[0].homeCurrency : 'VND';
   
   return {
     members: [...allMembers],
@@ -2809,12 +2928,19 @@ function render() {
     
     // Build per-person summary
     const personSummary = [];
+    const wsTH = settleThreshold(ws.homeCurrency);
     [...allMembers].forEach(member => {
       const paid = workspacePaid[member] || 0;
       const used = workspaceUsage[member] || 0;
       const balance = workspaceBalances[member] || 0;
       const settledNet = workspaceSettlementsNet[member] || 0;
-      const status = balance > 0.01 ? 'receive' : (balance < -0.01 ? 'owe' : 'settled');
+      // Dùng ĐÚNG ngưỡng theo loại tiền tệ (settleThreshold), KHÔNG hardcode 0.01 -
+      // vì với VNĐ, ngưỡng "coi như đã hòa" là 1đ chứ không phải 0.01đ. Trước đây
+      // hardcode 0.01 khiến 1 khoản dư rất nhỏ (vd 0.3đ, dư ra do làm tròn chia
+      // tiền) bị coi là "còn nợ/sẽ nhận" dù phần tính settlement (simplifyDebts,
+      // cùng dùng settleThreshold) đã coi như hòa sổ - gây mâu thuẫn "All settled"
+      // ở dưới nhưng từng dòng vẫn hiện "receive/owes".
+      const status = balance > wsTH ? 'receive' : (balance < -wsTH ? 'owe' : 'settled');
       
       personSummary.push({
         name: member,
@@ -3030,7 +3156,7 @@ function render() {
     } else if (expenses.length === 0) {
       html += `<p class="empty">${t('no_expense')}</p>`;
     } else {
-      html += `<div class="row" style="gap:8px; margin-bottom:12px;">
+      html += `<div class="row" style="gap:8px; margin-bottom:8px;">
         <select id="filterPerson" style="flex:1; min-width:0; height:34px; font-size:13px;">
           <option value="">${t('expense_filter_all_payer')}</option>
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${expenseFilter.person === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
@@ -3041,21 +3167,48 @@ function render() {
         </select>
       </div>`;
 
-      const filtered = expenses.filter(e => {
-        if (expenseFilter.person && e.paidBy !== expenseFilter.person) return false;
-        if (expenseFilter.category) {
-          const wantNone = expenseFilter.category === '__none__';
-          if (wantNone ? e.category : e.category !== expenseFilter.category) return false;
-        }
-        return true;
-      });
+      // Bộ lọc thời gian: dropdown với nhiều lựa chọn tiện dụng + tùy chọn khoảng
+      // ngày tùy ý. Khác với lọc người/loại (chỉ ảnh hưởng danh sách + biểu đồ),
+      // lọc thời gian còn áp dụng xuống bảng "Tổng quan" (KHÔNG áp dụng cho "Kết
+      // quả chia tiền" - phần đó luôn tính đủ toàn bộ để đảm bảo đúng công nợ thật).
+      // Dùng expenseFilter.datePreset trực tiếp (không đoán ngược từ dateFrom/dateTo) -
+      // tránh trường hợp "Tùy chỉnh" bị nhận nhầm thành preset khác nếu ngày chọn
+      // trùng khớp 1 preset có sẵn.
+      const activePreset = expenseFilter.datePreset || 'all';
+      const presetOptions = ['all', 'last7', 'last30', 'week', 'lastweek', 'month', 'lastmonth', 'custom'];
+      const presetLabelKey = { all: 'filter_date_all', last7: 'filter_date_last7', last30: 'filter_date_last30', week: 'filter_date_week', lastweek: 'filter_date_lastweek', month: 'filter_date_month', lastmonth: 'filter_date_lastmonth', custom: 'filter_date_custom' };
+      html += `<div class="row" style="gap:8px; margin-bottom:6px;">
+        <select id="filterDatePreset" style="flex:1; min-width:0; height:34px; font-size:13px;">
+          ${presetOptions.map(p => `<option value="${p}" ${activePreset === p ? 'selected' : ''}>${t(presetLabelKey[p])}</option>`).join('')}
+        </select>
+      </div>`;
+      if (activePreset === 'custom') {
+        html += `<div class="row" style="gap:8px; margin-bottom:6px;">
+          <input type="date" id="filterDateFrom" value="${escapeHtml(expenseFilter.dateFrom)}" placeholder="${t('filter_date_from')}" style="height:32px; font-size:12.5px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 10px; flex:1; min-width:0;">
+          <input type="date" id="filterDateTo" value="${escapeHtml(expenseFilter.dateTo)}" placeholder="${t('filter_date_to')}" style="height:32px; font-size:12.5px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 10px; flex:1; min-width:0;">
+        </div>`;
+      }
+      if (activePreset !== 'all') {
+        html += `<div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">${t('filter_date_note')}</div>`;
+      }
+
+      const filtered = filterExpensesForView(expenses);
 
       if (filtered.length === 0) {
         html += `<p class="empty">${t('no_expense_filter_match')}</p>`;
       } else {
         let filteredTotal = 0;
-        filtered.forEach(e => {
-          filteredTotal += e.amountHome;
+        filtered.forEach(e => { filteredTotal += e.amountHome; });
+
+        // Phân trang: ~10 chi tiêu/trang. Tổng tiền vẫn tính trên TOÀN BỘ danh
+        // sách đã lọc (không chỉ trang đang xem).
+        const totalPages = Math.max(1, Math.ceil(filtered.length / EXPENSES_PER_PAGE));
+        if (expensePage > totalPages) expensePage = totalPages;
+        if (expensePage < 1) expensePage = 1;
+        const pageStart = (expensePage - 1) * EXPENSES_PER_PAGE;
+        const pageItems = filtered.slice(pageStart, pageStart + EXPENSES_PER_PAGE);
+
+        pageItems.forEach(e => {
           const isForeign = !!e.currency;
           html += `<div class="expense-row">
             <div class="expense-main">
@@ -3074,15 +3227,25 @@ function render() {
             </div>
           </div>`;
         });
-        const isFiltered = expenseFilter.person || expenseFilter.category;
+
+        if (totalPages > 1) {
+          html += `<div class="row" style="justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+            <button data-action="expensePagePrev" ${expensePage <= 1 ? 'disabled' : ''} style="padding:6px 12px; font-size:12.5px;">${t('pagination_prev')}</button>
+            <span style="font-size:12px; color:var(--text-muted);">${t('pagination_page_label')} ${expensePage}/${totalPages}</span>
+            <button data-action="expensePageNext" ${expensePage >= totalPages ? 'disabled' : ''} style="padding:6px 12px; font-size:12.5px;">${t('pagination_next')}</button>
+          </div>`;
+        }
+
+        const isFiltered = expenseFilter.person || expenseFilter.category || expenseFilter.dateFrom || expenseFilter.dateTo;
         html += `<div class="total-line">${isFiltered ? t('filter_total') : t('total_spending')} <strong style="color:var(--text-primary)">${fmtHome(filteredTotal, trip.homeCurrency)}</strong></div>`;
       }
     }
     html += `</div>`;
 
     if (trip.members.length > 0 && expenses.length > 0) {
-      html += renderCategoryChart(expenses);
-      html += renderDailyChart(expenses);
+      const chartExpenses = filterExpensesForView(expenses);
+      html += renderCategoryChart(chartExpenses);
+      html += renderDailyChart(chartExpenses);
     }
 
     if (trip.members.length > 0) {
@@ -3092,12 +3255,24 @@ function render() {
       const cashFundRemaining = computeCashFundRemaining(expenses);
       const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
 
-      const usage = computeUsage(trip.members, expenses);
-      const paid = computePaid(trip.members, expenses);
-      const settlementsNet = computeSettlementsNet(trip.members, expenses);
+      // Bảng "Tổng quan" áp dụng lọc theo THỜI GIAN (nếu có chọn) - KHÔNG áp
+      // dụng cho Settlement/Quỹ chung ở trên (luôn tính đủ toàn bộ để đúng công
+      // nợ thật, tránh gợi ý thanh toán sai dựa trên dữ liệu bị lọc thiếu).
+      const overviewExpenses = (expenseFilter.dateFrom || expenseFilter.dateTo)
+        ? expenses.filter(e => {
+            if (expenseFilter.dateFrom && e.date < expenseFilter.dateFrom) return false;
+            if (expenseFilter.dateTo && e.date > expenseFilter.dateTo) return false;
+            return true;
+          })
+        : expenses;
+      const overviewRawBalances = computeBalances(trip.members, overviewExpenses);
+      const { peopleBalances: overviewPeopleBalances } = splitCashFundBalance(overviewRawBalances);
+      const usage = computeUsage(trip.members, overviewExpenses);
+      const paid = computePaid(trip.members, overviewExpenses);
+      const settlementsNet = computeSettlementsNet(trip.members, overviewExpenses);
 
       html += `<div class="card">
-        <div class="card-head"><span class="card-title">${t('overview_title')}</span></div>
+        <div class="card-head"><span class="card-title">${t('overview_title')}${(expenseFilter.dateFrom || expenseFilter.dateTo) ? ` <span style="font-size:11px; font-weight:400; color:var(--accent-text);">(${appLang === 'vi' ? 'đã lọc theo thời gian' : 'time-filtered'})</span>` : ''}</span></div>
         <div class="overview-head-row">
           <span></span>
           <span class="overview-head-label">${t('col_paid')}</span>
@@ -3106,7 +3281,7 @@ function render() {
           <span class="overview-head-label">${t('col_balance')}</span>
         </div>`;
       trip.members.forEach(m => {
-        const bal = roundCurrency(peopleBalances[m] || 0, trip.homeCurrency);
+        const bal = roundCurrency(overviewPeopleBalances[m] || 0, trip.homeCurrency);
         const TH = settleThreshold(trip.homeCurrency);
         const cls = bal > TH ? 'balance-pos' : bal < -TH ? 'balance-neg' : '';
         const sign = bal > 0 ? '+' : '';
@@ -3189,14 +3364,21 @@ function render() {
 
   app.innerHTML = html;
 
-  // Nút nổi "nhảy tới phần chia tiền" - chỉ hiện khi trang vừa render THỰC SỰ có
-  // card settlement (không hiện trong modal, tab Lịch sử, hay khi chưa có trip nào).
-  const jumpBtn = document.getElementById('jumpToSettlementBtn');
-  if (jumpBtn) {
-    jumpBtn.style.display = (document.getElementById('settlementCard') && !modal) ? 'flex' : 'none';
-    const jumpLabel = appLang === 'vi' ? 'Xem kết quả chia tiền' : 'Jump to settlement';
-    jumpBtn.setAttribute('aria-label', jumpLabel);
-    jumpBtn.setAttribute('title', jumpLabel);
+  // Bottom nav: highlight tab đang active + ẩn 1 số mục không hợp lệ với trạng
+  // thái hiện tại (đang mở modal, hoặc đang ở chế độ khách bị khóa 1 trip).
+  const bottomNav = document.getElementById('bottomNav');
+  if (bottomNav) {
+    bottomNav.style.display = modal ? 'none' : 'flex';
+    const btns = bottomNav.querySelectorAll('.bottom-nav-btn');
+    // Thứ tự nút: [0]=Trip, [1]=All Trips, [2]=+, [3]=Settlement, [4]=History
+    btns.forEach(b => b.classList.remove('active'));
+    if (btns[0]) btns[0].classList.toggle('active', activeTripId !== 'WORKSPACE' && activeTripId !== 'HISTORY');
+    if (btns[1]) btns[1].classList.toggle('active', activeTripId === 'WORKSPACE');
+    if (btns[4]) btns[4].classList.toggle('active', activeTripId === 'HISTORY');
+    // Khách qua link share (TRIP_LOCKED_ID): ẩn All Trips + History, vì khách
+    // không có quyền xem các trip khác hay lịch sử toàn workspace.
+    if (btns[1]) btns[1].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
+    if (btns[4]) btns[4].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
   }
 
   app.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handleAction));
@@ -3204,10 +3386,35 @@ function render() {
   if (mi) mi.addEventListener('input', e => { memberInput = e.target.value; });
 
   const fp = document.getElementById('filterPerson');
-  if (fp) fp.addEventListener('change', e => { expenseFilter.person = e.target.value; render(); });
+  if (fp) fp.addEventListener('change', e => { expenseFilter.person = e.target.value; expensePage = 1; render(); });
   const fc = document.getElementById('filterCategory');
   if (fc) fc.addEventListener('change', e => {
     expenseFilter.category = e.target.value === '__all__' ? '' : e.target.value;
+    expensePage = 1;
+    render();
+  });
+  const fdf = document.getElementById('filterDateFrom');
+  if (fdf) fdf.addEventListener('change', e => { expenseFilter.dateFrom = e.target.value; expensePage = 1; render(); });
+  const fdt = document.getElementById('filterDateTo');
+  if (fdt) fdt.addEventListener('change', e => { expenseFilter.dateTo = e.target.value; expensePage = 1; render(); });
+  const fdp = document.getElementById('filterDatePreset');
+  if (fdp) fdp.addEventListener('change', e => {
+    const preset = e.target.value;
+    expenseFilter.datePreset = preset;
+    if (preset === 'custom') {
+      // Giữ nguyên from/to hiện có (nếu có) để người dùng tự chỉnh tiếp qua ô ngày;
+      // nếu chưa có gì, gợi ý sẵn tuần này làm điểm bắt đầu.
+      if (!expenseFilter.dateFrom && !expenseFilter.dateTo) {
+        const wk = computeDatePreset('week');
+        expenseFilter.dateFrom = wk.from;
+        expenseFilter.dateTo = wk.to;
+      }
+    } else {
+      const range = computeDatePreset(preset);
+      expenseFilter.dateFrom = range.from;
+      expenseFilter.dateTo = range.to;
+    }
+    expensePage = 1;
     render();
   });
 
@@ -3286,6 +3493,7 @@ function handleAction(e) {
   const url = e.currentTarget.dataset.url;
   const payload = e.currentTarget.dataset.payload;
   const scope = e.currentTarget.dataset.scope;
+  const preset = e.currentTarget.dataset.preset;
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
   if (action === 'viewReceipt') { window.app.viewReceipt(url); return; }
@@ -3293,6 +3501,16 @@ function handleAction(e) {
   if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
   if (action === 'quickAddMember') { window.app.addMember(name); return; }
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
+  if (action === 'setDatePreset') {
+    const range = computeDatePreset(preset);
+    expenseFilter.dateFrom = range.from;
+    expenseFilter.dateTo = range.to;
+    expensePage = 1;
+    render();
+    return;
+  }
+  if (action === 'expensePagePrev') { expensePage = Math.max(1, expensePage - 1); render(); return; }
+  if (action === 'expensePageNext') { expensePage = expensePage + 1; render(); return; }
 
   if (action === 'openWorkspaceSettleDialog') {
     const from = e.currentTarget.dataset.from;
@@ -3369,7 +3587,13 @@ function handleAction(e) {
     return;
   }
   
-  if (action === 'selectTrip') { activeTripId = id; expenseFilter = { person: '', category: '' }; render(); }
+  if (action === 'selectTrip') {
+    activeTripId = id;
+    if (id !== 'WORKSPACE' && id !== 'HISTORY') lastRealTripId = id;
+    expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+    expensePage = 1;
+    render();
+  }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
 
   if (action === 'openRenameTrip') {
@@ -4109,6 +4333,51 @@ window.app = {
   scrollToSettlement() {
     const el = document.getElementById('settlementCard');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
+
+  // ===== Bottom navigation bar (kiểu Money Lover) =====
+  navGoToTrip() {
+    if (lastRealTripId) {
+      activeTripId = lastRealTripId;
+      expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+      expensePage = 1;
+      render();
+    } else {
+      showToast(appLang === 'vi' ? 'Chưa có trip nào' : 'No trip yet');
+    }
+  },
+
+  navGoToWorkspace() {
+    activeTripId = 'WORKSPACE';
+    render();
+  },
+
+  navGoToHistory() {
+    activeTripId = 'HISTORY';
+    render();
+  },
+
+  navGoToSettlement() {
+    // Nếu trang hiện tại không có card settlement (vd đang ở tab Lịch sử), chuyển
+    // về trip gần nhất (hoặc All Trips) trước rồi mới cuộn tới.
+    if (!document.getElementById('settlementCard')) {
+      activeTripId = lastRealTripId || 'WORKSPACE';
+      render();
+    }
+    window.app.scrollToSettlement();
+  },
+
+  navQuickAddExpense() {
+    if (!lastRealTripId) {
+      showToast(appLang === 'vi' ? 'Chưa có trip nào, tạo trip trước đã' : 'No trip yet, create one first');
+      return;
+    }
+    if (activeTripId !== lastRealTripId) {
+      activeTripId = lastRealTripId;
+      expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+      expensePage = 1;
+    }
+    handleAction({ currentTarget: { dataset: { action: 'openAddExpense' } } });
   },
 
   openExportMenu(scope) {
@@ -4926,6 +5195,7 @@ function startApp(workspaceId) {
           activeTripId = activeTrip.trip_id;
         }
       }
+      if (activeTripId && activeTripId !== 'WORKSPACE' && activeTripId !== 'HISTORY') lastRealTripId = activeTripId;
       
       isLoading = false;
       render();
