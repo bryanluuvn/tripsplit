@@ -2043,6 +2043,7 @@ let renameTripCustomCurrency = '';
 let editMemberDraft = { oldName: '', newName: '' };
 let expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
 let expensePage = 1;
+let membersSectionExpanded = false; // mặc định thu gọn phần Thành viên, bấm mới mở rộng
 const EXPENSES_PER_PAGE = 10;
 
 // Áp dụng TẤT CẢ filter đang bật (người trả/loại/thời gian) lên 1 danh sách
@@ -2825,10 +2826,7 @@ function render() {
   });
   if (!TRIP_LOCKED_ID) {
     html += `<div class="tab add-tab" data-action="openNewTrip">${t('new_trip')}</div>`;
-
-    // NEW: Add "All Trips" tab at the end
-    html += `<div class="tab ${activeTripId === 'WORKSPACE' ? 'active' : ''}" data-action="selectTrip" data-id="WORKSPACE" style="margin-left:auto;">📊 ${t('workspace_summary') || 'All Trips'}</div>`;
-    html += `<div class="tab ${activeTripId === 'HISTORY' ? 'active' : ''}" data-action="selectTrip" data-id="HISTORY">📜 ${t('activity_log_title')}</div>`;
+    // "All Trips" và "Lịch sử" đã chuyển xuống bottom nav bar, không cần lặp lại ở đây nữa.
   }
   
   html += `</div>`;
@@ -3125,37 +3123,51 @@ function render() {
       <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
     </div>`;
 
+    // Trip chưa có thành viên nào thì bắt buộc mở rộng luôn - không có gì để thu gọn,
+    // và người dùng cần thấy ngay ô thêm thành viên đầu tiên.
+    const showMembersExpanded = membersSectionExpanded || trip.members.length === 0;
     html += `<div class="card">
-      <div class="card-head"><span class="card-title">${appLang === 'en' ? 'Members' : 'Thành viên'}</span><span style="font-size:11.5px; color:var(--text-muted); font-weight:400; text-transform:none;">${t('member_hint')}</span></div>
+      <div class="card-head" style="cursor:pointer;" data-action="toggleMembersSection">
+        <span class="card-title">${appLang === 'en' ? 'Members' : 'Thành viên'} <span style="font-weight:400; color:var(--text-muted); font-size:12px;">(${trip.members.length})</span></span>
+        <span style="font-size:12px; color:var(--text-muted);">${showMembersExpanded ? (appLang === 'en' ? '▴ Collapse' : '▴ Thu gọn') : (appLang === 'en' ? '▾ Edit' : '▾ Sửa')}</span>
+      </div>`;
+    if (!showMembersExpanded) {
+      // Thu gọn: chỉ hiện tóm tắt tên, bấm vào tiêu đề ở trên để mở rộng ra sửa.
+      html += `<div style="font-size:13px; color:var(--text-secondary); padding:2px 0 4px; cursor:pointer;" data-action="toggleMembersSection">
+        ${trip.members.length === 0 ? t('no_members_yet') : trip.members.map(escapeHtml).join(', ')}
+      </div>`;
+    } else {
+      html += `<div style="font-size:11.5px; color:var(--text-muted); font-weight:400; margin:-6px 0 8px;">${t('member_hint')}</div>
       <div class="member-sortable row" style="margin-bottom:12px; flex-wrap:wrap;">`;
-    if (trip.members.length === 0) {
-      html += `<span style="font-size:13px; color:var(--text-muted);">${t('no_members_yet')}</span>`;
-    }
-    trip.members.forEach(m => {
-      const hasExpenses = expenses.some(e => e.paidBy === m);
-      html += `<span class="member-tag" draggable="true" data-member-name="${escapeHtml(m)}">
-        <span class="drag-handle" title="${t('drag_reorder_title')}">⠿</span>
-        <span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span>
-        <button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button>
-      </span>`;
-    });
-    html += `</div><div class="row">
-      <input id="memberInput" placeholder="${t('member_placeholder')}" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
-      <button onclick="window.app.addMember()">${t('btn_add_member')}</button>
-    </div>`;
-
-    const suggestedMembers = getKnownMembersExcluding(trip.members);
-    if (suggestedMembers.length > 0) {
-      html += `<div style="margin-top:10px;">
-        <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">${t('quick_add_member_hint')}</div>
-        <div class="row" style="flex-wrap:wrap; gap:6px;">`;
-      suggestedMembers.forEach(m => {
-        html += `<button class="chip-btn" data-action="quickAddMember" data-name="${escapeHtml(m)}" style="
-          padding:5px 12px; border-radius:999px; border:1px solid var(--border-strong);
-          background:var(--surface-2); font-size:12.5px; cursor:pointer; color:var(--text-primary);
-        ">+ ${escapeHtml(m)}</button>`;
+      if (trip.members.length === 0) {
+        html += `<span style="font-size:13px; color:var(--text-muted);">${t('no_members_yet')}</span>`;
+      }
+      trip.members.forEach(m => {
+        const hasExpenses = expenses.some(e => e.paidBy === m);
+        html += `<span class="member-tag" draggable="true" data-member-name="${escapeHtml(m)}">
+          <span class="drag-handle" title="${t('drag_reorder_title')}">⠿</span>
+          <span data-action="openEditMember" data-name="${escapeHtml(m)}" style="cursor:pointer;">${escapeHtml(m)}</span>
+          <button data-action="removeMember" data-name="${escapeHtml(m)}" data-has-expenses="${hasExpenses}">✕</button>
+        </span>`;
       });
-      html += `</div></div>`;
+      html += `</div><div class="row">
+        <input id="memberInput" placeholder="${t('member_placeholder')}" value="${escapeHtml(memberInput)}" style="flex:1;" onkeydown="if(event.key==='Enter')window.app.addMember()">
+        <button onclick="window.app.addMember()">${t('btn_add_member')}</button>
+      </div>`;
+
+      const suggestedMembers = getKnownMembersExcluding(trip.members);
+      if (suggestedMembers.length > 0) {
+        html += `<div style="margin-top:10px;">
+          <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">${t('quick_add_member_hint')}</div>
+          <div class="row" style="flex-wrap:wrap; gap:6px;">`;
+        suggestedMembers.forEach(m => {
+          html += `<button class="chip-btn" data-action="quickAddMember" data-name="${escapeHtml(m)}" style="
+            padding:5px 12px; border-radius:999px; border:1px solid var(--border-strong);
+            background:var(--surface-2); font-size:12.5px; cursor:pointer; color:var(--text-primary);
+          ">+ ${escapeHtml(m)}</button>`;
+        });
+        html += `</div></div>`;
+      }
     }
     html += `</div>`;
 
@@ -3525,6 +3537,7 @@ function handleAction(e) {
   if (action === 'restoreExpense') { window.app.restoreExpense(payload); return; }
   if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
   if (action === 'quickAddMember') { window.app.addMember(name); return; }
+  if (action === 'toggleMembersSection') { membersSectionExpanded = !membersSectionExpanded; render(); return; }
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
   if (action === 'setDatePreset') {
     const range = computeDatePreset(preset);
@@ -3617,6 +3630,7 @@ function handleAction(e) {
     if (id !== 'WORKSPACE' && id !== 'HISTORY') lastRealTripId = id;
     expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
     expensePage = 1;
+    membersSectionExpanded = false;
     render();
   }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
