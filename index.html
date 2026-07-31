@@ -365,11 +365,22 @@
       </div>
       <h1>Trip Split</h1>
     </div>
-    <div class="row" style="gap:10px;">
-      <button class="icon-btn" id="switchWorkspaceBtn" onclick="window.app.switchWorkspace()" aria-label="Switch workspace / Đổi workspace" title="Switch workspace / Đổi workspace" style="font-size:15px;">🏠</button>
-      <button class="icon-btn" id="shareBtn" onclick="window.app.openShare()" aria-label="Share" title="Share" style="font-size:15px;">🔗</button>
-      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="Refresh" title="Refresh" style="font-size:15px;" id="refreshBtn">↻</button>
-      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="Help" title="Help" style="font-size:15px;">❓</button>
+    <div class="row" style="gap:6px;">
+      <button class="icon-btn" id="switchWorkspaceBtn" onclick="window.app.switchWorkspace()" aria-label="Switch workspace / Đổi workspace" title="Switch workspace / Đổi workspace">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10.5V20h12v-9.5"/></svg>
+      </button>
+      <button class="icon-btn" id="shareBtn" onclick="window.app.openShare()" aria-label="Share" title="Share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.3"/><circle cx="17.5" cy="5.5" r="2.3"/><circle cx="17.5" cy="18.5" r="2.3"/><path d="M8.1 10.8l7.3-4.2"/><path d="M8.1 13.2l7.3 4.2"/></svg>
+      </button>
+      <button class="icon-btn" onclick="window.app.manualRefresh()" aria-label="Sync" title="Sync data" id="refreshBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 19.5 15.5"/><path d="M20 5v6h-6"/></svg>
+      </button>
+      <button class="icon-btn" onclick="window.app.hardReloadApp()" aria-label="Reload app" title="Reload app (get latest version)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10.5 12 14.5 16 10.5"/><path d="M4.5 17.5h15"/></svg>
+      </button>
+      <button class="icon-btn" onclick="window.app.openHelp()" aria-label="Help" title="Help">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.3a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.2 1-1.2 1.8v.3"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button class="icon-btn lang-toggle-btn" onclick="toggleAppLang()" id="langToggleBtn" title="Switch language / Đổi ngôn ngữ" style="font-size:12px; font-weight:700; min-width:32px; letter-spacing:0.02em;">EN</button>
       <span id="syncDot" class="sync-dot" title="Sync status"></span>
     </div>
@@ -601,6 +612,9 @@ const APP_TRANSLATIONS = {
     help_g5_body: '<li>📜 <strong>Lịch sử:</strong> xem lại mọi thao tác, có nút "↩️ Khôi phục" nếu lỡ xóa nhầm</li><li>Sửa tên thành viên/chi tiêu bất cứ lúc nào · "Lưu trữ trip" ẩn trip cũ mà không mất dữ liệu</li><li>Bấm ↻ trên header để đồng bộ dữ liệu mới nhất từ người khác</li>',
     help_feedback_title: 'Góp ý / Báo lỗi',
     help_feedback_body: 'Có góp ý hoặc gặp lỗi khi dùng app, liên hệ:',
+    help_reload_title: 'Tải lại app',
+    help_reload_body: 'Nếu mở app qua "Add to Home Screen" sẽ không có nút reload của trình duyệt. Bấm icon ⭯ trên header nếu nghi ngờ app đang hiện bản cũ (vd sau khi có cập nhật mới) - dữ liệu không mất, chỉ tải lại giao diện.',
+    help_reload_btn: 'Tải lại app',
     archive_done: 'Đã lưu trữ trip',
     unarchive_done: 'Đã bỏ lưu trữ',
     sync_done: 'Đã đồng bộ dữ liệu mới nhất',
@@ -897,6 +911,9 @@ const APP_TRANSLATIONS = {
     help_g5_body: '<li>📜 <strong>History:</strong> see every action logged, with a "↩️ Restore" button if something gets deleted by mistake</li><li>Rename members/expenses anytime · "Archive trip" hides an old trip without losing data</li><li>Tap ↻ in the header to sync the latest data from others</li>',
     help_feedback_title: 'Feedback / Report a bug',
     help_feedback_body: 'Got feedback or ran into a bug, reach out:',
+    help_reload_title: 'Reload app',
+    help_reload_body: 'If you opened the app via "Add to Home Screen" there\'s no browser refresh button. Tap the ⭯ icon in the header if you suspect the app is showing an old version (e.g. after an update) - your data is safe, this only reloads the interface.',
+    help_reload_btn: 'Reload app',
     archive_done: 'Trip archived',
     unarchive_done: 'Trip unarchived',
     sync_done: 'Data synced',
@@ -4554,6 +4571,16 @@ window.app = {
     showToast(t('sync_done'));
   },
 
+  // Khi mở app dạng "Add to Home Screen" (PWA standalone), không có thanh trình
+  // duyệt để bấm nút reload - nút ↻ ở header chỉ đồng bộ DỮ LIỆU (trips/expenses),
+  // không tải lại chính app (HTML/JS) khi có bản cập nhật mới. Hàm này ép trình
+  // duyệt tải lại toàn bộ trang, bỏ qua cache, để lấy đúng bản mới nhất.
+  hardReloadApp() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_reload', Date.now()); // phá cache bằng query param đổi mỗi lần
+    window.location.href = url.toString();
+  },
+
   openHelp() {
     const overlay = document.createElement('div');
     overlay.id = 'helpOverlay';
@@ -4575,6 +4602,11 @@ window.app = {
       </div>
 
       ${groupsHtml}
+
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+        <p style="font-weight:600; margin-bottom:4px; font-size:13.5px;">${t('help_reload_title')}</p>
+        <p style="margin:0; font-size:13px; color:var(--text-secondary);">${t('help_reload_body')}</p>
+      </div>
 
       <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
         <p style="font-weight:600; margin-bottom:4px; font-size:13.5px;">${t('help_feedback_title')}</p>
