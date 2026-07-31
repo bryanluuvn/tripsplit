@@ -376,7 +376,7 @@
   </div>
   <div id="app"></div>
   <button id="scrollToTopBtn" onclick="window.app.scrollToTop()" aria-label="Scroll to top" title="Scroll to top" style="
-    display:none; position:fixed; bottom:80px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
+    display:none; position:fixed; bottom:88px; right:max(20px, calc((100vw - 512px) / 2 + 20px)); z-index:40;
     width:46px; height:46px; border-radius:50%; border:1.5px solid var(--border-strong, #CBCFE8);
     background:var(--surface, #fff); color:var(--text-muted, #9295B0); font-size:16px;
     align-items:center; justify-content:center; box-shadow:var(--shadow-card, 0 1px 8px rgba(26,26,46,0.06));
@@ -388,25 +388,29 @@
     display:flex; justify-content:center;
     background:var(--surface, #fff); border-top:1px solid var(--border, #E4E5F0);
     box-shadow:0 -2px 12px rgba(26,26,46,0.06);
-    padding-bottom:env(safe-area-inset-bottom, 0);
+    padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px));
   ">
-    <div style="width:100%; max-width:512px; display:flex; align-items:center; justify-content:space-around; height:60px; padding:0 6px;">
-      <button class="bottom-nav-btn" onclick="window.app.navGoToTrip()" aria-label="Trip" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
-        <span style="font-size:19px;">🏠</span>
+    <div style="width:100%; max-width:512px; display:flex; align-items:center; justify-content:space-around; height:64px; padding:0 6px;">
+      <button class="bottom-nav-btn" onclick="window.app.navGoToTrip()" aria-label="Trip" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:18px;">🧳</span>
+        <span id="navLabelTrip" class="bottom-nav-label" style="font-size:9.5px; font-weight:500;">Trip</span>
       </button>
-      <button class="bottom-nav-btn" onclick="window.app.navGoToWorkspace()" aria-label="All Trips" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
-        <span style="font-size:19px;">📊</span>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToWorkspace()" aria-label="All Trips" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:18px;">📊</span>
+        <span id="navLabelWorkspace" class="bottom-nav-label" style="font-size:9.5px; font-weight:500;">All</span>
       </button>
       <button class="bottom-nav-btn" onclick="window.app.navQuickAddExpense()" aria-label="Add expense" style="
-        background:var(--blue, #4A6CF7); border:none; width:50px; height:50px; border-radius:50%;
+        background:var(--blue, #4A6CF7); border:none; width:48px; height:48px; border-radius:50%;
         display:flex; align-items:center; justify-content:center; cursor:pointer; color:#fff;
-        font-size:24px; box-shadow:0 3px 10px rgba(74,108,247,0.4); margin:0 4px; flex-shrink:0;
+        font-size:23px; box-shadow:0 3px 10px rgba(74,108,247,0.4); margin:0 4px; flex-shrink:0;
       ">＋</button>
-      <button class="bottom-nav-btn" onclick="window.app.navGoToSettlement()" aria-label="Settlement" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
-        <span style="font-size:19px;">💰</span>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToSettlement()" aria-label="Settlement" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:18px;">💰</span>
+        <span id="navLabelSettlement" class="bottom-nav-label" style="font-size:9.5px; font-weight:500;">Split</span>
       </button>
-      <button class="bottom-nav-btn" onclick="window.app.navGoToHistory()" aria-label="History" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
-        <span style="font-size:19px;">📜</span>
+      <button class="bottom-nav-btn" onclick="window.app.navGoToHistory()" aria-label="History" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; cursor:pointer; color:var(--text-muted); flex:1; height:100%;">
+        <span style="font-size:18px;">📜</span>
+        <span id="navLabelHistory" class="bottom-nav-label" style="font-size:9.5px; font-weight:500;">History</span>
       </button>
     </div>
   </nav>
@@ -1127,14 +1131,14 @@ function currencySymbol(code) {
 // amount luôn lưu số tiền gốc theo currency của dòng đó; trip.exchangeRate là tỷ giá
 // 1 đơn vị ngoại tệ = bao nhiêu VNĐ, áp dụng chung cho cả trip.
 const CATEGORIES = [
-  { id: '', label: 'Khác', color: '#9295B0', bg: '#EEEFF5', text: '#5F6275' },
-  { id: 'food', label: 'Ăn uống', color: '#E8833A', bg: '#FCEEE1', text: '#A85A1F' },
-  { id: 'transport', label: 'Di chuyển', color: '#3266E0', bg: '#E8EDFC', text: '#2348AD' },
-  { id: 'stay', label: 'Chỗ ở', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
-  { id: 'activity', label: 'Vui chơi', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
-  { id: 'shopping', label: 'Mua sắm', color: '#7C3AED', bg: '#EDE9FE', text: '#5B21B6' },
-  { id: 'fund', label: 'Góp quỹ', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
-  { id: 'payment', label: 'Thanh toán', color: '#0E7490', bg: '#E0F2FE', text: '#0C5068' },
+  { id: '', label: 'Khác', icon: '🔖', color: '#9295B0', bg: '#EEEFF5', text: '#5F6275' },
+  { id: 'food', label: 'Ăn uống', icon: '🍜', color: '#E8833A', bg: '#FCEEE1', text: '#A85A1F' },
+  { id: 'transport', label: 'Di chuyển', icon: '🚗', color: '#3266E0', bg: '#E8EDFC', text: '#2348AD' },
+  { id: 'stay', label: 'Chỗ ở', icon: '🏨', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
+  { id: 'activity', label: 'Vui chơi', icon: '🎉', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
+  { id: 'shopping', label: 'Mua sắm', icon: '🛍️', color: '#7C3AED', bg: '#EDE9FE', text: '#5B21B6' },
+  { id: 'fund', label: 'Góp quỹ', icon: '💰', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
+  { id: 'payment', label: 'Thanh toán', icon: '💸', color: '#0E7490', bg: '#E0F2FE', text: '#0C5068' },
 ];
 // Tên thành viên đặc biệt đóng vai "người trả" khi chi tiêu bằng tiền mặt từ quỹ chung.
 // Không phải người thật - bị lọc riêng khỏi bảng số dư/settlement hiển thị cho người dùng.
@@ -1153,6 +1157,10 @@ function categoryLabel(id) {
 function categoryColor(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.color : '#9295B0';
+}
+function categoryIcon(id) {
+  const found = CATEGORIES.find(c => c.id === id);
+  return found ? found.icon : '🔖';
 }
 function categoryBadgeStyle(id) {
   const found = CATEGORIES.find(c => c.id === id);
@@ -1228,7 +1236,7 @@ function renderCategoryChart(expenses) {
   rows.forEach(r => {
     html += `<div class="legend-item">
       <span class="legend-dot" style="background:${categoryColor(r.cat)};"></span>
-      <span class="legend-label">${escapeHtml(categoryLabel(r.cat))}</span>
+      <span class="legend-label">${categoryIcon(r.cat)} ${escapeHtml(categoryLabel(r.cat))}</span>
       <span class="legend-val">${Math.round(r.pct * 100)}%</span>
     </div>`;
   });
@@ -3169,7 +3177,7 @@ function render() {
         </select>
         <select id="filterCategory" style="flex:1; min-width:0; height:34px; font-size:13px;">
           <option value="__all__">${t('filter_all_cat')}</option>
-          ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
+          ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${c.icon} ${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
         </select>
       </div>`;
 
@@ -3218,7 +3226,7 @@ function render() {
           const isForeign = !!e.currency;
           html += `<div class="expense-row">
             <div class="expense-main">
-              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' ' + t('expense_paid_for') + ' ' + escapeHtml(e.desc) : ' ' + t('expense_paid')}
+              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${categoryIcon(e.category)} ${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' ' + t('expense_paid_for') + ' ' + escapeHtml(e.desc) : ' ' + t('expense_paid')}
               <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? (appLang==='en'?'contributed to fund':'góp vào quỹ chung') : e.category === 'payment' ? (appLang==='en'?'paid to ':'thanh toán cho ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : (appLang==='en'?'split with ':'chia ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : (appLang==='en'?'everyone':'cả nhóm'))}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
@@ -3385,6 +3393,17 @@ function render() {
     // không có quyền xem các trip khác hay lịch sử toàn workspace.
     if (btns[1]) btns[1].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
     if (btns[4]) btns[4].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
+
+    // Chữ nhỏ dưới icon (nằm ngoài phần <script> nên không dùng được ${t(...)} lúc
+    // render HTML tĩnh - cập nhật text theo ngôn ngữ ở đây bằng JS thật.
+    const navLabelTrip = document.getElementById('navLabelTrip');
+    if (navLabelTrip) navLabelTrip.textContent = appLang === 'vi' ? 'Trip' : 'Trip';
+    const navLabelWorkspace = document.getElementById('navLabelWorkspace');
+    if (navLabelWorkspace) navLabelWorkspace.textContent = appLang === 'vi' ? 'Tất cả' : 'All';
+    const navLabelSettlement = document.getElementById('navLabelSettlement');
+    if (navLabelSettlement) navLabelSettlement.textContent = appLang === 'vi' ? 'Chia tiền' : 'Split';
+    const navLabelHistory = document.getElementById('navLabelHistory');
+    if (navLabelHistory) navLabelHistory.textContent = appLang === 'vi' ? 'Lịch sử' : 'History';
   }
 
   app.querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', handleAction));
@@ -4119,12 +4138,21 @@ function renderModal() {
           <button type="button" data-set-expense-tab="payment" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === 'payment' ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_payment')}</button>
         </div>
       </div>
-      <div class="field">
-        <label>${t('paid_by_label')}</label>
-        <select id="paidBySelect">
-          ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
-          <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>${t('cash_fund_payer_option')}</option>
-        </select>
+      <div class="row" style="gap:8px;">
+        <div class="field" style="flex:${currentTab === 'expense' ? '1.1' : '1'};">
+          <label>${t('paid_by_label')}</label>
+          <select id="paidBySelect">
+            ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+            <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>${t('cash_fund_payer_option')}</option>
+          </select>
+        </div>
+        ${currentTab === 'expense' ? `
+        <div class="field" style="flex:1;">
+          <label>${t('cat_label')}</label>
+          <select id="categorySelect">
+            ${expenseOnlyCategories.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${c.icon} ${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
+          </select>
+        </div>` : ''}
       </div>
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
@@ -4156,29 +4184,22 @@ function renderModal() {
       </div>
       <div class="field">
         <label>${t('desc_label')}</label>
-        <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}">
-      </div>
-      <div class="field">
-        <label>${t('receipt_label')} <span style="color:var(--text-muted); font-weight:400;">(${t('optional_label')})</span></label>
-        ${expDraft.receiptPreview ? `
-          <div style="position:relative; width:64px; height:64px;">
-            <img id="receiptThumb" src="${expDraft.receiptPreview}" style="width:64px; height:64px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border); cursor:pointer; display:block;">
-            <button type="button" id="removeReceiptBtn" aria-label="${t('remove_receipt_aria')}" style="position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:12px; line-height:1; cursor:pointer;">✕</button>
-          </div>
-        ` : `
-          <label for="receiptInput" style="display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); cursor:pointer; font-size:13px; color:var(--text-secondary); width:fit-content;">
-            📷 ${t('add_receipt_btn')}
-          </label>
-        `}
+        <div class="row" style="gap:8px; align-items:center;">
+          <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}" style="flex:1;">
+          ${expDraft.receiptPreview ? `
+            <div style="position:relative; width:40px; height:40px; flex-shrink:0;">
+              <img id="receiptThumb" src="${expDraft.receiptPreview}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border); cursor:pointer; display:block;">
+              <button type="button" id="removeReceiptBtn" aria-label="${t('remove_receipt_aria')}" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:10px; line-height:1; cursor:pointer;">✕</button>
+            </div>
+          ` : `
+            <label for="receiptInput" title="${t('add_receipt_btn')}" style="display:flex; align-items:center; justify-content:center; width:40px; height:40px; flex-shrink:0; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); cursor:pointer; font-size:17px;">
+              📷
+            </label>
+          `}
+        </div>
         <input type="file" id="receiptInput" accept="image/*" style="display:none;">
       </div>
       ${currentTab === 'expense' ? `
-      <div class="field">
-        <label>${t('cat_label')}</label>
-        <select id="categorySelect">
-          ${expenseOnlyCategories.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
-        </select>
-      </div>
       <div class="field">
         <label>${t('split_label')}</label>
         <div class="row">
@@ -4740,7 +4761,7 @@ window.app = {
       rowsHtml += `<div style="padding:10px 0; border-bottom:1px solid var(--border);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
           <div style="flex:1; min-width:0;">
-            <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${escapeHtml(categoryLabel(e.category))}</span>
+            <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${categoryIcon(e.category)} ${escapeHtml(categoryLabel(e.category))}</span>
             <span style="font-size:13.5px;">${e.desc ? escapeHtml(e.desc) : escapeHtml(e.paidBy) + ' ' + t('paid_suffix')}</span>
             ${isPayer ? `<span style="font-size:11px; color:var(--accent-text); background:var(--accent-bg); padding:1px 5px; border-radius:4px; margin-left:4px;">${t('payer_badge')}</span>` : ''}
             <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${escapeHtml(e.date)} · ${escapeHtml(e.paidBy)} ${t('export_transfers_for')} ${fmtHome(e.amountHome, trip.homeCurrency || currentHomeCurrency())} · ${t('share_for')} ${splitMembers.length}</div>
