@@ -586,6 +586,7 @@ const APP_TRANSLATIONS = {
     btn_delete_trip: 'Xóa trip này',
     confirm_delete_expense: 'Xóa chi tiêu này? Không thể hoàn tác.',
     confirm_delete_trip: 'Xóa trip này? Không thể hoàn tác, dữ liệu sẽ mất với mọi người.',
+    confirm_archive_trip: 'Lưu trữ trip này? Trip sẽ ẩn khỏi danh sách chính, có thể bỏ lưu trữ lại sau.',
     confirm_delete_member_prefix: 'Xóa thành viên',
     confirm_delete_member_suffix: 'và mọi khoản chi tiêu có liên quan?',
     loading_text: 'Đang tải dữ liệu...',
@@ -620,6 +621,11 @@ const APP_TRANSLATIONS = {
     unarchive_done: 'Đã bỏ lưu trữ',
     sync_done: 'Đã đồng bộ dữ liệu mới nhất',
     img_done: 'Đã tải ảnh tổng kết',
+    img_result_title: 'Ảnh tổng kết',
+    img_result_download: 'Tải xuống',
+    img_result_copy: 'Copy ảnh',
+    img_copy_done: 'Đã copy ảnh - dán vào Zalo/Messenger để gửi',
+    img_copy_failed: 'Trình duyệt không hỗ trợ copy ảnh, thử tải xuống thay thế',
     connect_error: 'Lỗi kết nối, thử lại sau: ',
     workspace_invalid: 'Chỉ dùng chữ, số, dấu gạch ngang/gạch dưới, không dấu cách',
     workspace_required: 'Nhập tên không gian trước khi tiếp tục',
@@ -716,6 +722,7 @@ const APP_TRANSLATIONS = {
     share_trip_regenerate: 'Tạo lại link',
     share_trip_regenerate_confirm: 'Link cũ sẽ ngừng hoạt động. Ai đang giữ link cũ sẽ không vào được nữa. Tiếp tục?',
     share_workspace_heading: 'Giới thiệu app TripSplit',
+    share_export_hint: 'Muốn xuất/gửi kết quả chia tiền (Google Sheets, ảnh, CSV, text)? Xem nút 📤 "Xuất / Chia sẻ" ngay cạnh phần Kết quả chia tiền.',
     workspace_summary: 'Tất cả Trip',
     load_error_prefix: 'Không tải được dữ liệu:',
     retry_btn: 'Thử lại',
@@ -885,6 +892,7 @@ const APP_TRANSLATIONS = {
     btn_delete_trip: 'Delete trip',
     confirm_delete_expense: 'Delete this expense? This cannot be undone.',
     confirm_delete_trip: 'Delete this trip? All data will be lost for everyone.',
+    confirm_archive_trip: 'Archive this trip? It will be hidden from the main list - you can unarchive it later.',
     confirm_delete_member_prefix: 'Remove member',
     confirm_delete_member_suffix: 'and all their related expenses?',
     loading_text: 'Loading...',
@@ -919,6 +927,11 @@ const APP_TRANSLATIONS = {
     unarchive_done: 'Trip unarchived',
     sync_done: 'Data synced',
     img_done: 'Summary image downloaded',
+    img_result_title: 'Summary image',
+    img_result_download: 'Download',
+    img_result_copy: 'Copy image',
+    img_copy_done: 'Image copied - paste it into Zalo/Messenger to send',
+    img_copy_failed: 'Browser doesn\'t support copying images, try downloading instead',
     connect_error: 'Connection error, please try again: ',
     workspace_invalid: 'Only letters, numbers, hyphens and underscores, no spaces',
     workspace_required: 'Please enter a workspace name',
@@ -1013,6 +1026,7 @@ const APP_TRANSLATIONS = {
     share_trip_regenerate: 'Regenerate link',
     share_trip_regenerate_confirm: 'The old link will stop working. Anyone holding it will lose access. Continue?',
     share_workspace_heading: 'Share the TripSplit app',
+    share_export_hint: 'Want to export/send the settlement results (Google Sheets, image, CSV, text)? Check the 📤 "Export / Share" button right next to the Settlement section.',
     workspace_summary: 'All Trips',
     load_error_prefix: 'Could not load data:',
     retry_btn: 'Retry',
@@ -1599,17 +1613,13 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   ctx.font = '400 11px -apple-system, sans-serif';
   ctx.fillText(t('img_footer'), PAD, y);
 
-  // --- Xuất PNG ---
+  // --- Xuất PNG: thay vì tự tải xuống ngay, lưu blob lại và hiện dialog cho chọn
+  // "Copy" (dán thẳng vào Zalo/Messenger) hoặc "Tải xuống" - giống cách đã làm với
+  // Google Sheets export.
   canvas.toBlob(blob => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}-tong-ket.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(t('img_done'));
+    lastGeneratedImageBlob = blob;
+    const filename = `${trip.name.replace(/[^\w\u00C0-\u1EF9 ]/g, '')}-tong-ket.png`;
+    showImageResultDialog(blob, filename);
   }, 'image/png');
 }
 
@@ -2578,6 +2588,60 @@ function downloadCsvRows(rows, filename) {
 }
 
 let lastSheetExportUrl = '';
+let lastGeneratedImageBlob = null;
+let lastGeneratedImageFilename = '';
+
+function showImageResultDialog(blob, filename) {
+  const existing = document.getElementById('imageResultOverlay');
+  if (existing) existing.remove();
+
+  lastGeneratedImageFilename = filename;
+  const previewUrl = URL.createObjectURL(blob);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'imageResultOverlay';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal" style="max-width:420px;">
+    <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <h2 style="margin:0;">${t('img_result_title')}</h2>
+      <button class="icon-btn" id="imageResultCloseBtn" aria-label="${t('aria_close')}">✕</button>
+    </div>
+    <img src="${previewUrl}" style="width:100%; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:14px; display:block;">
+    <div class="row" style="justify-content:flex-end; gap:8px;">
+      <button id="imageResultDownloadBtn">⬇️ ${t('img_result_download')}</button>
+      <button class="primary" id="imageResultCopyBtn">📋 ${t('img_result_copy')}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  const cleanup = () => { URL.revokeObjectURL(previewUrl); overlay.remove(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+  document.getElementById('imageResultCloseBtn').addEventListener('click', cleanup);
+  document.getElementById('imageResultDownloadBtn').addEventListener('click', () => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(t('img_done'));
+  });
+  document.getElementById('imageResultCopyBtn').addEventListener('click', async () => {
+    try {
+      // Clipboard API cho ảnh yêu cầu context an toàn (HTTPS) + trình duyệt hỗ trợ
+      // ClipboardItem - fallback về tải xuống nếu không dùng được.
+      if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+        throw new Error('Clipboard image API not supported');
+      }
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showToast(t('img_copy_done'));
+    } catch (err) {
+      showToast(t('img_copy_failed'));
+    }
+  });
+}
 
 async function exportRowsToGoogleSheet(rows, title, scopeKey) {
   showToast(t('sheets_export_loading'));
@@ -3146,7 +3210,14 @@ function render() {
 
     html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
       <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}${trip.archived ? ' <span style="font-size:11px; color:var(--text-muted); font-weight:500;">(đã lưu trữ)</span>' : ''}</h2>
-      <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
+      <div class="row" style="gap:2px;">
+        <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
+        ${trip.archived
+          ? `<button class="icon-btn" data-action="unarchiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_unarchive')}" title="${t('btn_unarchive')}">📤</button>`
+          : `<button class="icon-btn" data-action="archiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_archive')}" title="${t('btn_archive')}">🗄️</button>`
+        }
+        ${TRIP_LOCKED_ID ? '' : `<button class="icon-btn" data-action="deleteTrip" aria-label="${t('btn_delete_trip')}" title="${t('btn_delete_trip')}" style="color:var(--danger);">🗑️</button>`}
+      </div>
     </div>`;
 
     // Trip chưa có thành viên nào thì bắt buộc mở rộng luôn - không có gì để thu gọn,
@@ -3404,14 +3475,6 @@ function render() {
       }
       html += `</div>`;
     }
-
-    html += `<div class="row" style="justify-content:space-between; margin-top:4px;">
-      ${TRIP_LOCKED_ID ? '<span></span>' : `<button class="danger-link" data-action="deleteTrip">${t('btn_delete_trip')}</button>`}
-      ${trip.archived
-        ? `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="unarchiveTrip" data-id="${trip.trip_id}">${t('btn_unarchive')}</button>`
-        : `<button style="font-size:13px; padding:6px 0; border:none; background:none; color:var(--text-secondary); cursor:pointer;" data-action="archiveTrip" data-id="${trip.trip_id}">${t('btn_archive')}</button>`
-      }
-    </div>`;
   }
 
   app.innerHTML = html;
@@ -3683,6 +3746,7 @@ function handleAction(e) {
   }
 
   if (action === 'archiveTrip') {
+    if (!confirm(t('confirm_archive_trip'))) return;
     const trip = rawTrips.find(t => t.trip_id === id);
     withSaving(
       () => { trip.archived = 'true'; },
@@ -4697,6 +4761,10 @@ window.app = {
       
       <div style="font-size:12px; color:var(--text-muted); background:var(--surface-2); padding:10px; border-radius:var(--radius-sm);">
         🔗 ${appLang === 'vi' ? 'Chia sẻ link này trên Messenger, Zalo, hoặc bất kỳ đâu' : 'Share this link on Messenger, email, or anywhere'}
+      </div>
+
+      <div style="font-size:12px; color:var(--text-muted); background:var(--accent-bg); padding:10px; border-radius:var(--radius-sm); margin-top:8px;">
+        💡 ${t('share_export_hint')}
       </div>
       
       <div class="row" style="justify-content:flex-end; margin-top:14px;">
