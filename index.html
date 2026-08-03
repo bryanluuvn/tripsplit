@@ -4387,7 +4387,17 @@ function renderModal() {
   }
   if (modal === 'addExpense') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    document.getElementById('paidBySelect').addEventListener('change', e => expDraft.paidBy = e.target.value);
+    document.getElementById('paidBySelect').addEventListener('change', e => {
+      expDraft.paidBy = e.target.value;
+      // Nếu người vừa chọn làm "Ai trả" đang có trong danh sách "Người nhận" đã
+      // chọn trước đó (từ lúc paidBy còn là người khác), phải bỏ chọn luôn -
+      // không thể vừa là người trả vừa là người nhận trong cùng 1 thanh toán.
+      expDraft.splitWith = expDraft.splitWith.filter(m => m !== expDraft.paidBy);
+      // Cần render lại ngay vì danh sách "Người nhận" (tab Thanh toán) loại trừ
+      // đúng người đang được chọn ở "Ai trả" - nếu không render lại, danh sách
+      // vẫn hiện theo người trả CŨ cho tới khi người dùng bấm vào 1 pill khác.
+      renderModal();
+    });
     document.getElementById('dateInput').addEventListener('input', e => expDraft.date = e.target.value);
     document.getElementById('timeInput').addEventListener('input', e => expDraft.time = e.target.value);
 
