@@ -1911,11 +1911,13 @@ async function apiPost(payload) {
 let pendingOps = [];
 const DB_NAME = 'TripSplitOfflineDB';
 const STORE_NAME = 'workspace_data';
+const PENDING_OPS_STORE = 'pending_ops';
+const DB_VERSION = 2; // v2: thêm store pending_ops để không mất thao tác khi reload lúc offline
 
 // Initialize IndexedDB
 async function initDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve(req.result);
     req.onupgradeneeded = (e) => {
@@ -1923,8 +1925,46 @@ async function initDB() {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'wsId' });
       }
+      if (!db.objectStoreNames.contains(PENDING_OPS_STORE)) {
+        db.createObjectStore(PENDING_OPS_STORE, { keyPath: 'wsId' });
+      }
     };
   });
+}
+
+// Lưu lại danh sách pendingOps hiện tại vào IndexedDB (theo workspace) - để nếu
+// người dùng reload/tắt app trước khi đồng bộ xong, thao tác vẫn còn đó và được
+// gửi lại ở lần mở app tiếp theo, thay vì mất luôn không dấu vết.
+async function savePendingOpsToDB() {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(PENDING_OPS_STORE, 'readwrite');
+    const store = tx.objectStore(PENDING_OPS_STORE);
+    await new Promise((resolve, reject) => {
+      const req = store.put({ wsId: getOfflineCacheKey(), ops: pendingOps, timestamp: Date.now() });
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve();
+    });
+  } catch (err) {
+    console.warn('[Offline] Failed to save pending ops to IndexedDB:', err);
+  }
+}
+
+// Nạp lại pendingOps đã lưu từ lần trước (nếu có) - gọi lúc khởi động app.
+async function loadPendingOpsFromDB() {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(PENDING_OPS_STORE, 'readonly');
+    const store = tx.objectStore(PENDING_OPS_STORE);
+    return await new Promise((resolve, reject) => {
+      const req = store.get(getOfflineCacheKey());
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result ? (req.result.ops || []) : []);
+    });
+  } catch (err) {
+    console.warn('[Offline] Failed to load pending ops from IndexedDB:', err);
+    return [];
+  }
 }
 
 // Save trips, expenses, and activity log to IndexedDB
@@ -1991,13 +2031,18 @@ apiPost = async function(payload) {
   try {
     const result = await originalApiPost(payload);
     // Success: remove this op from pending queue if it was there
+    const hadPending = pendingOps.some(op => JSON.stringify(op) === JSON.stringify(payload));
     pendingOps = pendingOps.filter(op => JSON.stringify(op) !== JSON.stringify(payload));
+    if (hadPending) await savePendingOpsToDB();
     return result;
   } catch (err) {
     console.warn('[Offline] POST failed, queueing operation:', payload);
     // Network failed: queue the operation for later
     if (!pendingOps.find(op => JSON.stringify(op) === JSON.stringify(payload))) {
       pendingOps.push(payload);
+      // Lưu ngay vào IndexedDB - nếu người dùng reload/tắt app trước khi có mạng
+      // lại, thao tác này vẫn còn, không mất im lặng như trước.
+      await savePendingOpsToDB();
     }
     // Return fake success to let UI update optimistically
     return { ok: true };
@@ -2015,6 +2060,7 @@ async function syncPendingOps() {
     try {
       await originalApiPost(op);
       pendingOps = pendingOps.filter(o => JSON.stringify(o) !== JSON.stringify(op));
+      await savePendingOpsToDB(); // cập nhật lại danh sách đã lưu, bớt dần theo từng op thành công
       console.log('[Offline] Synced:', op.action);
     } catch (err) {
       console.warn('[Offline] Failed to sync:', op.action, err);
@@ -5347,7 +5393,7 @@ function startTripShareApp(token) {
   TRIP_LOCKED_ID = 'pending'; // giá trị tạm để ẩn ngay các nút/tab không phù hợp, tránh nháy UI trước khi có data thật
   document.getElementById('app').innerHTML = '';
 
-  loadOffline().then(cachedData => {
+  loadOffline().then(async cachedData => {
     if (cachedData.trips && cachedData.trips.length > 0) {
       rawTrips = cachedData.trips;
       rawExpenses = cachedData.expenses || [];
@@ -5359,6 +5405,16 @@ function startTripShareApp(token) {
       isLoading = false;
       render();
     }
+
+    // Khôi phục thao tác chưa kịp đồng bộ từ phiên trước (guest cũng có thể thêm
+    // chi tiêu) - xem giải thích chi tiết ở startApp().
+    const restoredOps = await loadPendingOpsFromDB();
+    if (restoredOps.length > 0) {
+      pendingOps = restoredOps;
+      await syncPendingOps();
+      if (pendingOps.length > 0) return;
+    }
+
     refreshData(true);
   }).catch(() => {
     refreshData(true);
@@ -5381,7 +5437,7 @@ function startApp(workspaceId) {
   document.getElementById('app').innerHTML = '';
   
   // 🚀 OPTIMIZATION: Load cached data immediately, then fetch fresh
-  loadOffline().then(cachedData => {
+  loadOffline().then(async cachedData => {
     if (cachedData.trips && cachedData.trips.length > 0) {
       // Show cached data immediately
       rawTrips = cachedData.trips;
@@ -5401,6 +5457,23 @@ function startApp(workspaceId) {
       isLoading = false;
       render();
     }
+
+    // Khôi phục lại các thao tác CHƯA kịp đồng bộ từ phiên trước (vd người dùng
+    // sửa chi tiêu lúc mất mạng rồi tắt app trước khi có mạng lại). Nếu không làm
+    // bước này TRƯỚC refreshData(), dữ liệu mới từ server (chưa có thay đổi đó)
+    // sẽ âm thầm ghi đè lên, coi như mất thay đổi của người dùng mà không ai biết.
+    const restoredOps = await loadPendingOpsFromDB();
+    if (restoredOps.length > 0) {
+      pendingOps = restoredOps;
+      console.log(`[Offline] Restored ${restoredOps.length} pending operation(s) from previous session`);
+      await syncPendingOps(); // tự gọi refreshData(false) ở cuối nếu đồng bộ hết thành công
+      if (pendingOps.length > 0) {
+        // Vẫn còn thao tác chưa gửi được (vd vẫn đang offline) - không refreshData
+        // ngay để tránh ghi đè, sẽ tự thử lại khi có mạng (event 'online').
+        return;
+      }
+    }
+
     // Then fetch fresh data in background
     refreshData(true);
   }).catch(() => {
