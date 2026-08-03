@@ -505,6 +505,8 @@ const APP_TRANSLATIONS = {
     desc_label: 'Mô tả (không bắt buộc)',
     cat_label: 'Loại chi tiêu',
     split_label: 'Chia cho (bỏ trống = cả nhóm)',
+    select_all_btn: 'Chọn tất cả',
+    deselect_all_btn: 'Bỏ chọn tất cả',
     btn_save_expense: 'Lưu chi tiêu',
     tip_balance: "Muc Tong quan tung nguoi cho thay so du thuc te.",
     tip_foreign: "Khi tao trip, tick Co chi tieu bang ngoai te.",
@@ -814,6 +816,8 @@ const APP_TRANSLATIONS = {
     desc_label: 'Description (optional)',
     cat_label: 'Category',
     split_label: 'Split with (empty = whole group)',
+    select_all_btn: 'Select all',
+    deselect_all_btn: 'Deselect all',
     btn_save_expense: 'Save expense',
     tip_balance: "Check Per-person overview to see real balance after each share.",
     tip_foreign: "When creating a trip, check Has foreign currency expenses.",
@@ -4305,7 +4309,12 @@ function renderModal() {
       </div>
       ${currentTab === 'expense' ? `
       <div class="field">
-        <label>${t('split_label')}</label>
+        <div class="row" style="justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+          <label style="margin:0;">${t('split_label')}</label>
+          <span data-action="toggleSelectAllSplit" style="font-size:12px; font-weight:600; color:var(--accent-text); cursor:pointer; text-decoration:underline; text-underline-offset:2px;">
+            ${trip.members.length > 0 && trip.members.every(m => expDraft.splitWith.includes(m)) ? t('deselect_all_btn') : t('select_all_btn')}
+          </span>
+        </div>
         <div class="row">
           ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
         </div>
@@ -4457,6 +4466,14 @@ function renderModal() {
         renderModal();
       });
     });
+    const selectAllBtn = overlay.querySelector('[data-action="toggleSelectAllSplit"]');
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        const allSelected = trip.members.length > 0 && trip.members.every(m => expDraft.splitWith.includes(m));
+        expDraft.splitWith = allSelected ? [] : [...trip.members];
+        renderModal();
+      });
+    }
 
     const receiptInput = document.getElementById('receiptInput');
     if (receiptInput) {
