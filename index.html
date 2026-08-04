@@ -178,12 +178,28 @@
   .drag-handle:active { cursor: grabbing; }
 
   .expense-row {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    padding: 11px 0; border-bottom: 1px solid var(--border);
-    gap: 10px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
   }
   .expense-row:last-child { border-bottom: none; padding-bottom: 2px; }
   .expense-row:first-child { padding-top: 2px; }
+  .expense-row-icon {
+    width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+  }
+  .expense-row-body { flex: 1; min-width: 0; }
+  .expense-row-title {
+    font-size: 14.5px; font-weight: 500; margin: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .expense-row-subtitle { font-size: 12px; margin: 1px 0 0; color: var(--text-primary); }
+  .expense-row-subtitle .muted { color: var(--text-muted); }
+  .expense-row-right { text-align: right; flex-shrink: 0; }
+  .expense-row-amount { font-size: 14.5px; font-weight: 600; margin: 0; white-space: nowrap; }
+  .expense-row-conversion { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+  .expense-row-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .expense-row-meta-line { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px; }
+  .expense-row-actions { display: flex; gap: 0; }
   .expense-main { font-size: 14.5px; }
   .expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
   .amount { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
@@ -252,9 +268,19 @@
   .tab.drag-over-tab { border-color: var(--accent-text); background: var(--accent-bg); }
 
   .toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(0);
     background: var(--navy); color: white; padding: 10px 18px; border-radius: 24px;
     font-size: 13.5px; font-weight: 500; z-index: 100; box-shadow: 0 8px 24px rgba(26,26,46,0.25);
+    animation: toast-in 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .toast.toast-hide { animation: toast-out 0.18s ease-in forwards; }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  @keyframes toast-out {
+    from { opacity: 1; transform: translateX(-50%) translateY(0); }
+    to { opacity: 0; transform: translateX(-50%) translateY(8px); }
   }
 
   .total-line {
@@ -347,6 +373,10 @@
     border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes tab-pop {
+    from { transform: scale(0.94); }
+    to { transform: scale(1); }
+  }
 
   /* Category summary chart */
   .cat-chart-row {
@@ -1254,6 +1284,29 @@ function categoryColor(id) {
 function categoryIcon(id) {
   const found = CATEGORIES.find(c => c.id === id);
   return found ? found.icon : '🔖';
+}
+// Dựng tiêu đề + dòng phụ cho 1 dòng chi tiêu theo thiết kế mới (item "Expense
+// Card"): tiêu đề = mô tả, hoặc tên loại chi tiêu nếu bỏ trống mô tả. Dòng phụ
+// luôn hiện rõ "người trả → người được chia" thay vì chỉ đếm số người - đúng
+// yêu cầu là thông tin quan trọng, không nên rút gọn mất.
+function buildExpenseRowDisplay(e, trip) {
+  const payerName = escapeHtml(e.paidBy);
+  const title = escapeHtml(e.desc || categoryLabel(e.category));
+  let subtitleHtml;
+  if (e.category === CATEGORY_FUND) {
+    subtitleHtml = `${payerName} <span class="muted">${appLang === 'en' ? 'contributed to fund' : 'góp vào quỹ chung'}</span>`;
+  } else if (e.category === CATEGORY_PAYMENT) {
+    const recipient = e.splitWith.length > 0 ? escapeHtml(e.splitWith[0]) : '?';
+    subtitleHtml = `${payerName} <span class="muted">→</span> ${recipient}`;
+  } else {
+    const isEveryone = trip.members.length > 0 && e.splitWith.length === trip.members.length && trip.members.every(m => e.splitWith.includes(m));
+    const recipientsText = (e.splitWith.length === 0 || isEveryone)
+      ? (appLang === 'en' ? 'everyone' : 'cả nhóm')
+      : e.splitWith.map(escapeHtml).join(', ');
+    const arrowWord = appLang === 'en' ? 'paid' : 'trả';
+    subtitleHtml = `${payerName} <span class="muted">${arrowWord} →</span> ${recipientsText}`;
+  }
+  return { title, subtitleHtml };
 }
 function categoryBadgeStyle(id) {
   const found = CATEGORIES.find(c => c.id === id);
@@ -2372,7 +2425,10 @@ function showToast(msg) {
   t.id = 'toast'; t.className = 'toast'; t.textContent = msg;
   document.body.appendChild(t);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.remove(), 1800);
+  toastTimer = setTimeout(() => {
+    t.classList.add('toast-hide');
+    setTimeout(() => t.remove(), 180); // đợi animation ẩn chạy xong mới gỡ khỏi DOM
+  }, 1800);
 }
 
 function getTripObjects() {
@@ -3614,19 +3670,25 @@ function render() {
 
         pageItems.forEach(e => {
           const isForeign = !!e.currency;
+          const cat = CATEGORIES.find(c => c.id === e.category) || CATEGORIES[0];
+          const { title, subtitleHtml } = buildExpenseRowDisplay(e, trip);
           html += `<div class="expense-row">
-            <div class="expense-main">
-              <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${categoryIcon(e.category)} ${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' ' + t('expense_paid_for') + ' ' + escapeHtml(e.desc) : ' ' + t('expense_paid')}
-              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === CATEGORY_FUND ? (appLang==='en'?'contributed to fund':'góp vào quỹ chung') : e.category === CATEGORY_PAYMENT ? (appLang==='en'?'paid to ':'thanh toán cho ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : (appLang==='en'?'split with ':'chia ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : (appLang==='en'?'everyone':'cả nhóm'))}</div>
+            <div class="expense-row-icon" style="background:${cat.bg};">${cat.icon}</div>
+            <div class="expense-row-body">
+              <p class="expense-row-title">${title}</p>
+              <p class="expense-row-subtitle">${subtitleHtml}</p>
             </div>
-            <div class="row" style="gap:0; flex-wrap:nowrap;">
-              <span class="amount">${isForeign
-                ? `${e.amount.toLocaleString(numLocale())}${currencySymbol(e.currency)}<span style="display:block; font-size:11px; color:var(--text-muted); font-weight:400; text-align:right;">≈ ${fmtHome(e.amountHome, trip.homeCurrency)}</span>`
-                : fmtHome(e.amountHome, trip.homeCurrency)}</span>
-              <div class="expense-actions">
-                ${e.receiptUrl ? `<button class="icon-btn" data-action="viewReceipt" data-url="${escapeHtml(e.receiptUrl)}" aria-label="${t('view_receipt_aria')}">🧾</button>` : ''}
-                <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="${t('edit_aria')}">✏️</button>
-                <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="${t('delete_aria')}">🗑</button>
+            <div class="expense-row-right">
+              <p class="expense-row-amount">${isForeign
+                ? `${e.amount.toLocaleString(numLocale())}${currencySymbol(e.currency)} <span class="expense-row-conversion">≈${fmtHome(e.amountHome, trip.homeCurrency)}</span>`
+                : fmtHome(e.amountHome, trip.homeCurrency)}</p>
+              <div class="expense-row-meta-line">
+                <span class="expense-row-date">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''}</span>
+                <div class="expense-row-actions">
+                  ${e.receiptUrl ? `<button class="icon-btn" data-action="viewReceipt" data-url="${escapeHtml(e.receiptUrl)}" aria-label="${t('view_receipt_aria')}" style="padding:2px;">🧾</button>` : ''}
+                  <button class="icon-btn" data-action="editExpense" data-id="${e.id}" aria-label="${t('edit_aria')}" style="padding:2px;">✏️</button>
+                  <button class="icon-btn" data-action="deleteExpense" data-id="${e.id}" aria-label="${t('delete_aria')}" style="padding:2px;">🗑</button>
+                </div>
               </div>
             </div>
           </div>`;
@@ -4544,9 +4606,9 @@ function renderModal() {
       <h2>${expDraft && expDraft.id ? t('edit_expense_title') : t('add_expense_title')}</h2>
       <div class="field">
         <div class="row" style="background:var(--surface-2); border-radius:999px; padding:3px; gap:2px;">
-          <button type="button" data-set-expense-tab="expense" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_EXPENSE_TAB ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_expense')}</button>
-          <button type="button" data-set-expense-tab="fund" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_FUND ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_fund')}</button>
-          <button type="button" data-set-expense-tab="payment" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_PAYMENT ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_payment')}</button>
+          <button type="button" data-set-expense-tab="expense" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_EXPENSE_TAB ? 'background:var(--surface); box-shadow:0 2px 6px rgba(26,26,46,0.18); color:var(--accent-text); animation:tab-pop 0.15s ease-out;' : 'background:none; color:var(--text-secondary);'}">${t('tab_expense')}</button>
+          <button type="button" data-set-expense-tab="fund" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_FUND ? 'background:var(--surface); box-shadow:0 2px 6px rgba(26,26,46,0.18); color:var(--accent-text); animation:tab-pop 0.15s ease-out;' : 'background:none; color:var(--text-secondary);'}">${t('tab_fund')}</button>
+          <button type="button" data-set-expense-tab="payment" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_PAYMENT ? 'background:var(--surface); box-shadow:0 2px 6px rgba(26,26,46,0.18); color:var(--accent-text); animation:tab-pop 0.15s ease-out;' : 'background:none; color:var(--text-secondary);'}">${t('tab_payment')}</button>
         </div>
       </div>
       <div class="row" style="gap:8px;">
@@ -4567,34 +4629,34 @@ function renderModal() {
       </div>
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:1;">
-          <label>${t('date_label')}</label>
+          <label>📅 ${t('date_label')}</label>
           <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
         </div>
         <div class="field" style="flex:1;">
-          <label>${t('time_label')}</label>
+          <label>🕐 ${t('time_label')}</label>
           <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
         </div>
       </div>
       ${hasForeign ? `
       <div class="field">
-        <label>${t('currency_label')}</label>
+        <label>💱 ${t('currency_label')}</label>
         <div class="row">
           <span class="pill ${!isForeign ? 'active' : ''}" data-set-currency="">${trip.homeCurrency || 'VND'}</span>
           <span class="pill ${isForeign ? 'active' : ''}" data-set-currency="${escapeHtml(trip.foreignCurrency)}">${escapeHtml(trip.foreignCurrency)} (${currencySymbol(trip.foreignCurrency)})</span>
         </div>
       </div>` : ''}
       <div class="field">
-        <label>${t('amount_label')} ${isForeign
+        <label>💰 ${t('amount_label')} ${isForeign
           ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>`
           : (trip.homeCurrency || 'VND') === 'VND'
             ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_vnd')}</span>`
             : `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.homeCurrency)})</span>`}
         </label>
-        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}">
+        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}" style="font-size:19px; font-weight:600;">
         <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</div>
       </div>
       <div class="field">
-        <label>${t('desc_label')}</label>
+        <label>📝 ${t('desc_label')}</label>
         <div class="row" style="gap:8px; align-items:center;">
           <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}" style="flex:1;">
           ${expDraft.receiptPreview ? `
