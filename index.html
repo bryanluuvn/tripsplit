@@ -106,22 +106,22 @@
   .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 
   input, select {
-    height: 40px;
-    border: 1.5px solid var(--border-strong);
+    height: 44px;
+    border: 1.5px solid transparent;
     border-radius: var(--radius-sm);
     padding: 0 12px;
-    font-size: 15px;
-    background: var(--surface);
+    font-size: 16px;
+    background: var(--surface-2);
     color: var(--text-primary);
     width: 100%;
-    transition: border-color 0.15s ease;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
     font-family: inherit;
   }
   input::placeholder { color: var(--text-muted); }
-  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-bg); }
 
   button {
-    height: 40px;
+    height: 44px;
     border: 1.5px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--surface);
@@ -326,7 +326,7 @@
 
   .icon-btn {
     border: none; background: none; padding: 6px; cursor: pointer; display: inline-flex;
-    align-items: center; justify-content: center;
+    align-items: center; justify-content: center; height: auto;
     color: var(--text-muted); border-radius: var(--radius-sm); transition: all 0.12s ease;
   }
   .icon-btn:hover { color: var(--text-primary); background: var(--surface-2); }
@@ -376,6 +376,14 @@
   @keyframes tab-pop {
     from { transform: scale(0.94); }
     to { transform: scale(1); }
+  }
+  .amount-input-large {
+    font-size: 19px; font-weight: 600;
+  }
+  .amount-input-large::placeholder {
+    /* Placeholder chỉ là gợi ý, KHÔNG dùng chung độ đậm/cỡ chữ với giá trị thật
+    đã gõ - tránh nhìn giống như đã có sẵn số tiền, dễ gây nhầm lẫn. */
+    font-size: 14px; font-weight: 400; color: var(--text-muted);
   }
 
   /* Category summary chart */
@@ -570,6 +578,7 @@ const APP_TRANSLATIONS = {
     split_label: 'Chia cho (bỏ trống = cả nhóm)',
     select_all_btn: 'Chọn tất cả',
     deselect_all_btn: 'Bỏ chọn tất cả',
+    edit_link: 'Sửa',
     btn_save_expense: 'Lưu chi tiêu',
     tip_balance: "Muc Tong quan tung nguoi cho thay so du thuc te.",
     tip_foreign: "Khi tao trip, tick Co chi tieu bang ngoai te.",
@@ -886,6 +895,7 @@ const APP_TRANSLATIONS = {
     split_label: 'Split with (empty = whole group)',
     select_all_btn: 'Select all',
     deselect_all_btn: 'Deselect all',
+    edit_link: 'Edit',
     btn_save_expense: 'Save expense',
     tip_balance: "Check Per-person overview to see real balance after each share.",
     tip_foreign: "When creating a trip, check Has foreign currency expenses.",
@@ -2829,6 +2839,21 @@ function sheetsIconSvg() {
 function helpIconShare() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin:0 1px;"><circle cx="6" cy="12" r="2.3"/><circle cx="17.5" cy="5.5" r="2.3"/><circle cx="17.5" cy="18.5" r="2.3"/><path d="M8.1 10.8l7.3-4.2"/><path d="M8.1 13.2l7.3 4.2"/></svg>`;
 }
+// Icon SVG đơn sắc cho label form "Thêm chi tiêu" - thay cho emoji màu mè trước
+// đây (mỗi máy hiển thị 1 kiểu, nhìn như dán sticker lộn xộn). Dùng chung phong
+// cách nét mảnh, 1 màu (currentColor) với icon header đã có sẵn cho đồng bộ.
+function formIconUser() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:1px;"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-4.2 3.1-6.5 7-6.5s7 2.3 7 6.5"/></svg>`;
+}
+function formIconTag() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:1px;"><path d="M20.5 12.8 12.8 20.5a1.5 1.5 0 0 1-2.1 0l-7.2-7.2a1.5 1.5 0 0 1-.4-1V3.5A1.5 1.5 0 0 1 4.6 2h8.8c.4 0 .8.2 1 .4l7.2 7.2a1.5 1.5 0 0 1 0 2.1Z"/><circle cx="7.3" cy="7.3" r="1.3" fill="currentColor" stroke="none"/></svg>`;
+}
+function formIconMoney() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:1px;"><circle cx="12" cy="12" r="9.2"/><path d="M12 7.2v9.6"/><path d="M15 9.8c0-1-1.1-1.8-3-1.8s-3 .8-3 2 1 1.6 3 1.8c2 .2 3 .8 3 2s-1.1 2-3 2-3-.8-3-1.8"/></svg>`;
+}
+function formIconNote() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:1px;"><path d="M5 6h14M5 12h14M5 18h9"/></svg>`;
+}
 function helpIconSync() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin:0 1px;"><path d="M12 4v10"/><path d="M8 10.5 12 14.5 16 10.5"/><path d="M4.5 17.5h15"/></svg>`;
 }
@@ -4613,7 +4638,7 @@ function renderModal() {
       </div>
       <div class="row" style="gap:8px;">
         <div class="field" style="flex:${currentTab === CATEGORY_EXPENSE_TAB ? '1.1' : '1'};">
-          <label>${t('paid_by_label')}</label>
+          <label>${formIconUser()} ${t('paid_by_label')}</label>
           <select id="paidBySelect">
             ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
             <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>${t('cash_fund_payer_option')}</option>
@@ -4621,42 +4646,42 @@ function renderModal() {
         </div>
         ${currentTab === CATEGORY_EXPENSE_TAB ? `
         <div class="field" style="flex:1;">
-          <label>${t('cat_label')}</label>
+          <label>${formIconTag()} ${t('cat_label')}</label>
           <select id="categorySelect">
             ${expenseOnlyCategories.map(c => `<option value="${c.id}" ${c.id === expDraft.category ? 'selected' : ''}>${c.icon} ${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
           </select>
         </div>` : ''}
       </div>
-      <div class="row" style="gap:8px;">
-        <div class="field" style="flex:1;">
-          <label>📅 ${t('date_label')}</label>
-          <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
-        </div>
-        <div class="field" style="flex:1;">
-          <label>🕐 ${t('time_label')}</label>
-          <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
-        </div>
-      </div>
       ${hasForeign ? `
       <div class="field">
-        <label>💱 ${t('currency_label')}</label>
+        <label>${t('currency_label')}</label>
         <div class="row">
           <span class="pill ${!isForeign ? 'active' : ''}" data-set-currency="">${trip.homeCurrency || 'VND'}</span>
           <span class="pill ${isForeign ? 'active' : ''}" data-set-currency="${escapeHtml(trip.foreignCurrency)}">${escapeHtml(trip.foreignCurrency)} (${currencySymbol(trip.foreignCurrency)})</span>
         </div>
       </div>` : ''}
       <div class="field">
-        <label>💰 ${t('amount_label')} ${isForeign
+        <label>${formIconMoney()} ${t('amount_label')} ${isForeign
           ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>`
           : (trip.homeCurrency || 'VND') === 'VND'
             ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_vnd')}</span>`
             : `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.homeCurrency)})</span>`}
         </label>
-        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}" style="font-size:19px; font-weight:600;">
+        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}" class="amount-input-large">
         <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</div>
       </div>
+      <div class="row" style="gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>${t('date_label')}</label>
+          <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>${t('time_label')}</label>
+          <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
+        </div>
+      </div>
       <div class="field">
-        <label>📝 ${t('desc_label')}</label>
+        <label>${formIconNote()} ${t('desc_label')}</label>
         <div class="row" style="gap:8px; align-items:center;">
           <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}" style="flex:1;">
           ${expDraft.receiptPreview ? `
