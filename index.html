@@ -495,6 +495,9 @@ const APP_TRANSLATIONS = {
     member_hint: 'Bấm tên để sửa · Kéo ⠿ để sắp xếp',
     no_expense: 'Chưa có chi tiêu nào.',
     expense_filter_all_payer: 'Tất cả người trả',
+    expense_filter_all_split: 'Tất cả người được chia',
+    filters_label: 'Bộ lọc',
+    remove_filter_aria: 'Bỏ bộ lọc này',
     expense_filter_all_cat: 'Tất cả loại',
     expense_total: 'Tổng chi',
     col_paid: 'Đã chi',
@@ -695,6 +698,7 @@ const APP_TRANSLATIONS = {
     payer_badge: 'người trả',
     paid_suffix: 'đã trả',
     no_transactions_yet: 'Chưa có giao dịch nào.',
+    invalid_receipt_url: 'Không thể mở ảnh này (đường dẫn không hợp lệ).',
     close_btn: 'Đóng',
     view_member_detail_title: 'Xem chi tiết giao dịch của',
     archived_suffix: '(đã lưu trữ)',
@@ -782,6 +786,7 @@ const APP_TRANSLATIONS = {
     all_settled_full: 'Mọi người đã hòa sổ, không cần chuyển tiền.',
     mark_settled_title: 'Đánh dấu đã thanh toán — tự tạo khoản Thanh toán tương ứng',
     sync_undo_error_prefix: 'Lỗi đồng bộ, đã hoàn tác:',
+    sync_validation_error_prefix: 'Thao tác bị từ chối, không thể thử lại:',
     remove_member_confirm_prefix: 'đã có chi tiêu trong trip này. Xóa thành viên sẽ XÓA LUÔN mọi chi tiêu mà',
     remove_member_confirm_suffix: 'đã trả. Tiếp tục?',
     copy_paid_word: 'trả',
@@ -806,6 +811,9 @@ const APP_TRANSLATIONS = {
     member_hint: 'Tap name to edit · Drag ⠿ to reorder',
     no_expense: 'No expenses yet.',
     expense_filter_all_payer: 'All payers',
+    expense_filter_all_split: 'All split with',
+    filters_label: 'Filters',
+    remove_filter_aria: 'Remove this filter',
     expense_filter_all_cat: 'All categories',
     expense_total: 'Total',
     col_paid: 'Paid',
@@ -1001,6 +1009,7 @@ const APP_TRANSLATIONS = {
     payer_badge: 'payer',
     paid_suffix: 'paid',
     no_transactions_yet: 'No transactions yet.',
+    invalid_receipt_url: 'Can\'t open this image (invalid URL).',
     close_btn: 'Close',
     view_member_detail_title: 'View transaction details for',
     archived_suffix: '(archived)',
@@ -1088,6 +1097,7 @@ const APP_TRANSLATIONS = {
     all_settled_full: 'Everyone is settled up, no transfers needed.',
     mark_settled_title: 'Mark as paid — automatically creates a matching Payment expense',
     sync_undo_error_prefix: 'Sync error, changes reverted:',
+    sync_validation_error_prefix: 'Operation rejected, won\'t retry:',
     remove_member_confirm_prefix: 'already has expenses in this trip. Removing this member will DELETE ALL expenses paid by',
     remove_member_confirm_suffix: '. Continue?',
     copy_paid_word: 'paid',
@@ -1165,6 +1175,17 @@ function currentHomeCurrency() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Validate URL ảnh hóa đơn trước khi chèn vào thuộc tính src - chỉ chấp nhận
+// URL Drive thật (ảnh đã upload lên server qua luồng app bình thường) hoặc
+// data: URI ảnh (preview cục bộ trước khi upload xong). Chặn mọi domain/scheme
+// khác để tránh XSS qua thuộc tính src, phòng trường hợp receipt_url trong
+// Sheet bị chỉnh sửa trực tiếp (ngoài app) thành giá trị độc hại.
+function isValidReceiptUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (url.startsWith('data:image/')) return true;
+  if (url.startsWith('https://drive.google.com/')) return true;
+  return false;
+}
 function parseMembers(str) { return str ? String(str).split(',').map(s => s.trim()).filter(Boolean) : []; }
 
 const CURRENCIES = [
@@ -1196,6 +1217,12 @@ function currencySymbol(code) {
 // Quy đổi 1 expense sang VNĐ để dùng cho mọi tính toán (settlement, balance, chart...).
 // amount luôn lưu số tiền gốc theo currency của dòng đó; trip.exchangeRate là tỷ giá
 // 1 đơn vị ngoại tệ = bao nhiêu VNĐ, áp dụng chung cho cả trip.
+// Hằng số cho các loại category đặc biệt (thay vì magic string CATEGORY_FUND/CATEGORY_PAYMENT
+// rải rác khắp code - dễ gõ sai, khó tìm/sửa toàn bộ khi cần đổi tên).
+const CATEGORY_FUND = 'fund';
+const CATEGORY_PAYMENT = 'payment';
+const CATEGORY_EXPENSE_TAB = 'expense'; // tên tab trong form thêm chi tiêu (khác với category id thật)
+
 const CATEGORIES = [
   { id: '', label: 'Khác', icon: '🔖', color: '#9295B0', bg: '#EEEFF5', text: '#5F6275' },
   { id: 'food', label: 'Ăn uống', icon: '🍜', color: '#E8833A', bg: '#FCEEE1', text: '#A85A1F' },
@@ -1203,8 +1230,8 @@ const CATEGORIES = [
   { id: 'stay', label: 'Chỗ ở', icon: '🏨', color: '#1F9E6E', bg: '#E5F6EF', text: '#157450' },
   { id: 'activity', label: 'Vui chơi', icon: '🎉', color: '#D6457A', bg: '#FCE9F0', text: '#A12E59' },
   { id: 'shopping', label: 'Mua sắm', icon: '🛍️', color: '#7C3AED', bg: '#EDE9FE', text: '#5B21B6' },
-  { id: 'fund', label: 'Góp quỹ', icon: '💰', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
-  { id: 'payment', label: 'Thanh toán', icon: '💸', color: '#0E7490', bg: '#E0F2FE', text: '#0C5068' },
+  { id: CATEGORY_FUND, label: 'Góp quỹ', icon: '💰', color: '#C9970F', bg: '#FBF1DC', text: '#8A6608' },
+  { id: CATEGORY_PAYMENT, label: 'Thanh toán', icon: '💸', color: '#0E7490', bg: '#E0F2FE', text: '#0C5068' },
 ];
 // Tên thành viên đặc biệt đóng vai "người trả" khi chi tiêu bằng tiền mặt từ quỹ chung.
 // Không phải người thật - bị lọc riêng khỏi bảng số dư/settlement hiển thị cho người dùng.
@@ -1212,7 +1239,7 @@ const CASH_FUND_NAME = 'Quỹ chung';
 // Các category không phải "chi tiêu thật" - loại trừ khỏi chart, tổng chi, usage...
 // fund: góp tiền vào quỹ chung (chỉ cộng cho người góp, không chia ai)
 // payment: thanh toán công nợ giữa 2 người (chia bình thường nhưng loại khỏi chart)
-const NON_SPENDING_CATEGORIES = new Set(['fund', 'payment']);
+const NON_SPENDING_CATEGORIES = new Set([CATEGORY_FUND, CATEGORY_PAYMENT]);
 function isNonSpending(category) { return NON_SPENDING_CATEGORIES.has(category); }
 function categoryLabel(id) {
   // Use i18n if available
@@ -1673,8 +1700,8 @@ function computeBalances(members, expenses) {
   expenses.forEach(exp => {
     const amt = exp.amountVND ?? exp.amount;
     balances[exp.paidBy] = (balances[exp.paidBy] || 0) + amt;
-    // Khoản góp quỹ (category 'fund') chỉ cộng cho người góp, không chia/trừ cho ai
-    if (exp.category === 'fund') return;
+    // Khoản góp quỹ (category CATEGORY_FUND) chỉ cộng cho người góp, không chia/trừ cho ai
+    if (exp.category === CATEGORY_FUND) return;
     
     // CRITICAL: ensure splitWith is an array
     let splitMembers = exp.splitWith;
@@ -1725,14 +1752,14 @@ function computePaid(members, expenses) {
   const paid = {};
   members.forEach(m => paid[m] = 0);
   expenses.forEach(exp => {
-    if (exp.category === 'payment') return;
+    if (exp.category === CATEGORY_PAYMENT) return;
     const amt = exp.amountVND ?? exp.amount;
     paid[exp.paidBy] = (paid[exp.paidBy] || 0) + amt;
   });
   return paid;
 }
 
-// Tính net dòng tiền "thanh toán nợ" (category 'payment') của mỗi người:
+// Tính net dòng tiền "thanh toán nợ" (category CATEGORY_PAYMENT) của mỗi người:
 // dương nếu họ đã TRẢ cho người khác (giảm nợ họ đang mắc), âm nếu họ đã
 // NHẬN thanh toán từ người khác (giảm số người khác nợ họ). Cộng vào công
 // thức Paid - Used để ra đúng Balance, giúp bảng "Tổng quan" luôn khớp số
@@ -1741,7 +1768,7 @@ function computeSettlementsNet(members, expenses) {
   const net = {};
   members.forEach(m => net[m] = 0);
   expenses.forEach(exp => {
-    if (exp.category !== 'payment') return;
+    if (exp.category !== CATEGORY_PAYMENT) return;
     const amt = exp.amountVND ?? exp.amount;
     net[exp.paidBy] = (net[exp.paidBy] || 0) + amt;
     let splitMembers = exp.splitWith;
@@ -1766,7 +1793,7 @@ function splitCashFundBalance(balances) {
   return { peopleBalances };
 }
 
-// Tính đúng số tiền mặt còn lại trong quỹ chung = tổng đã góp (category 'fund')
+// Tính đúng số tiền mặt còn lại trong quỹ chung = tổng đã góp (category CATEGORY_FUND)
 // trừ tổng đã chi ra từ quỹ (paidBy = Quỹ chung, không phải khoản fund).
 // Tính tồn quỹ tiền mặt riêng theo TỪNG đơn vị tiền tệ đã dùng (không quy đổi gộp về VNĐ),
 // vì tiền mặt vật lý trong túi là tiền thật theo từng loại - quy đổi gộp sẽ làm mất
@@ -1777,8 +1804,8 @@ function computeCashFundRemaining(expenses) {
   expenses.forEach(exp => {
     const key = exp.currency || '';
     if (!byCurrency[key]) byCurrency[key] = { contributed: 0, spent: 0 };
-    if (exp.category === 'fund') byCurrency[key].contributed += exp.amount;
-    if (exp.paidBy === CASH_FUND_NAME && exp.category !== 'fund') byCurrency[key].spent += exp.amount;
+    if (exp.category === CATEGORY_FUND) byCurrency[key].contributed += exp.amount;
+    if (exp.paidBy === CASH_FUND_NAME && exp.category !== CATEGORY_FUND) byCurrency[key].spent += exp.amount;
   });
   const result = Object.entries(byCurrency)
     .map(([key, v]) => ({
@@ -1890,7 +1917,7 @@ function formatActivityEntry(entry) {
     case 'updateMembers':
       return { icon: '👥', text: `${t('act_updated_members')} "${tripName}"` };
     case 'addExpense':
-      if (meta.category === 'payment') {
+      if (meta.category === CATEGORY_PAYMENT) {
         return { icon: '💸', text: `${t('act_added_payment')}${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
       }
       return { icon: '🧾', text: `${t('act_added_expense')} "${desc}"${amountStr ? ' — ' + amountStr : ''} (${tripName})` };
@@ -1926,14 +1953,35 @@ async function apiPost(payload) {
   const body = TRIP_SHARE_TOKEN
     ? { ...payload, share_token: TRIP_SHARE_TOKEN }
     : { ...payload, workspace_id: WORKSPACE_ID };
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('POST failed');
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' }, // tránh CORS preflight với Apps Script
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    // fetch() tự nó throw = lỗi mạng thật (mất kết nối, DNS, timeout...) - đáng
+    // để thử lại, vì rất có thể sẽ thành công khi có mạng trở lại.
+    const err = new Error('Network error: ' + networkErr.message);
+    err.isNetworkError = true;
+    throw err;
+  }
+  if (!res.ok) {
+    // Lỗi HTTP status (vd 500/503 từ Apps Script) - coi như tạm thời, đáng thử lại.
+    const err = new Error('POST failed with status ' + res.status);
+    err.isNetworkError = true;
+    throw err;
+  }
   const json = await res.json();
-  if (json.ok === false) throw new Error(json.error || 'POST failed');
+  if (json.ok === false) {
+    // Backend ĐÃ NHẬN được request và chủ động từ chối (dữ liệu không hợp lệ,
+    // trip không tồn tại...) - thử lại với NGUYÊN request này sẽ luôn lỗi y hệt,
+    // không có ích gì, chỉ nên báo lỗi thật cho người dùng ngay.
+    const err = new Error(json.error || 'POST failed');
+    err.isValidationError = true;
+    throw err;
+  }
   return json;
 }
 
@@ -2066,8 +2114,16 @@ apiPost = async function(payload) {
     if (hadPending) await savePendingOpsToDB();
     return result;
   } catch (err) {
-    console.warn('[Offline] POST failed, queueing operation:', payload);
-    // Network failed: queue the operation for later
+    if (err.isValidationError) {
+      // Backend đã từ chối rõ ràng (dữ liệu không hợp lệ) - thử lại vô ích, cứ
+      // để lỗi bay lên cho processQueue() tự rollback + báo lỗi thật cho người
+      // dùng ngay, KHÔNG queue lại để retry (khác với lỗi mạng).
+      console.warn('[Offline] Validation error, not retrying:', payload, err.message);
+      throw err;
+    }
+    console.warn('[Offline] Network error, queueing operation:', payload);
+    // Lỗi mạng (hoặc không rõ loại) - queue lại để thử lại sau, vẫn báo optimistic
+    // success cho UI cập nhật ngay, đúng tinh thần offline-first.
     if (!pendingOps.find(op => JSON.stringify(op) === JSON.stringify(payload))) {
       pendingOps.push(payload);
       // Lưu ngay vào IndexedDB - nếu người dùng reload/tắt app trước khi có mạng
@@ -2087,14 +2143,24 @@ let syncRetryAttempt = 0;
 let syncInProgress = false;
 const SYNC_RETRY_BASE_MS = 3000;   // lần thử lại đầu tiên sau 3s
 const SYNC_RETRY_MAX_MS = 60000;   // tối đa 60s giữa các lần thử (không tăng vô hạn)
+const SYNC_RETRY_MAX_ATTEMPTS = 3; // chỉ tự động thử lại tối đa 3 lần - quá số này thì dừng lại,
+// chờ người dùng tự bấm nút đồng bộ hoặc trình duyệt báo 'online' (tránh vòng lặp
+// vô hạn âm thầm chạy ngầm nếu mạng thực sự có vấn đề lâu dài).
 
-// Lên lịch thử đồng bộ lại sau 1 khoảng thời gian tăng dần (3s → 6s → 12s → 24s
-// → 48s → tối đa 60s). Cần thiết vì trước đây chỉ dựa vào sự kiện 'online' của
-// trình duyệt - nhưng navigator.onLine không phải lúc nào cũng phản ánh đúng
-// tình trạng mạng thực tế (wifi yếu, Apps Script timeout tạm thời...), nên nếu
-// không tự thử lại định kỳ, thao tác có thể bị "kẹt" chờ vô thời hạn.
+// Lên lịch thử đồng bộ lại sau 1 khoảng thời gian tăng dần (3s → 6s → 12s), tối
+// đa 3 lần. Cần thiết vì trước đây chỉ dựa vào sự kiện 'online' của trình duyệt -
+// nhưng navigator.onLine không phải lúc nào cũng phản ánh đúng tình trạng mạng
+// thực tế (wifi yếu, Apps Script timeout tạm thời...), nên nếu không tự thử lại
+// định kỳ, thao tác có thể bị "kẹt" chờ vô thời hạn.
 function scheduleSyncRetry() {
   if (syncRetryTimer) return; // đã có lịch thử lại rồi, không đặt chồng thêm
+  if (syncRetryAttempt >= SYNC_RETRY_MAX_ATTEMPTS) {
+    // Đã thử tự động đủ 3 lần mà vẫn lỗi - dừng lại, không thử ngầm mãi. Thao
+    // tác vẫn còn nguyên trong pendingOps/IndexedDB, sẽ tự thử lại khi có sự
+    // kiện 'online' thật hoặc người dùng bấm nút đồng bộ thủ công.
+    console.log('[Offline] Đã thử tự động đủ ' + SYNC_RETRY_MAX_ATTEMPTS + ' lần, tạm dừng - chờ online hoặc đồng bộ thủ công.');
+    return;
+  }
   const delay = Math.min(SYNC_RETRY_BASE_MS * Math.pow(2, syncRetryAttempt), SYNC_RETRY_MAX_MS);
   syncRetryAttempt++;
   syncRetryTimer = setTimeout(() => {
@@ -2125,6 +2191,16 @@ async function syncPendingOps() {
         await savePendingOpsToDB(); // cập nhật lại danh sách đã lưu, bớt dần theo từng op thành công
         console.log('[Offline] Synced:', op.action);
       } catch (err) {
+        if (err.isValidationError) {
+          // Backend đã từ chối rõ ràng - KHÔNG có ích gì khi thử lại với đúng dữ
+          // liệu này. Bỏ khỏi hàng đợi luôn, báo lỗi thật cho người dùng thay vì
+          // âm thầm thử lại vô ích tới khi hết lượt.
+          console.warn('[Offline] Validation error, dropping from queue:', op.action, err.message);
+          pendingOps = pendingOps.filter(o => JSON.stringify(o) !== JSON.stringify(op));
+          await savePendingOpsToDB();
+          showToast(t('sync_validation_error_prefix') + ' ' + err.message);
+          continue; // vẫn tiếp tục thử các op còn lại trong hàng đợi, không break
+        }
         console.warn('[Offline] Failed to sync:', op.action, err);
         hadFailure = true;
         // Keep op in queue to retry later
@@ -2140,8 +2216,8 @@ async function syncPendingOps() {
       await refreshData(false);
       showToast(t('sync_done') || 'Sync complete');
     } else if (hadFailure) {
-      // Vẫn còn thao tác chưa gửi được - tự lên lịch thử lại, không chờ người
-      // dùng phải tự bấm nút đồng bộ hay chờ trình duyệt báo 'online'.
+      // Vẫn còn thao tác chưa gửi được - tự lên lịch thử lại (tối đa 3 lần),
+      // không chờ người dùng phải tự bấm nút đồng bộ hay chờ trình duyệt báo 'online'.
       setSyncDot('error');
       scheduleSyncRetry();
     }
@@ -2193,7 +2269,8 @@ let renameTripHomeCurrency = 'VND';
 let renameTripRate = '';
 let renameTripCustomCurrency = '';
 let editMemberDraft = { oldName: '', newName: '' };
-let expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+let expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+let filtersSectionExpanded = false; // mặc định thu gọn phần bộ lọc, bấm mới mở rộng (giống phần Thành viên)
 let expensePage = 1;
 let membersSectionExpanded = false; // mặc định thu gọn phần Thành viên, bấm mới mở rộng
 const EXPENSES_PER_PAGE = 10;
@@ -2204,6 +2281,7 @@ const EXPENSES_PER_PAGE = 10;
 function filterExpensesForView(expenses) {
   return expenses.filter(e => {
     if (expenseFilter.person && e.paidBy !== expenseFilter.person) return false;
+    if (expenseFilter.splitMember && !e.splitWith.includes(expenseFilter.splitMember)) return false;
     if (expenseFilter.category) {
       const wantNone = expenseFilter.category === '__none__';
       if (wantNone ? e.category : e.category !== expenseFilter.category) return false;
@@ -2306,9 +2384,9 @@ function getTripObjects() {
     name: String(t.trip_name),
     members: parseMembers(t.members),
     archived: t.archived === 'true' || t.archived === true,
-    foreignCurrency: t.foreign_currency || '',
+    foreignCurrency: (t.foreign_currency || '').toUpperCase(),
     exchangeRate: parseFloat(t.exchange_rate) || 1,  // ← Default to 1!
-    homeCurrency: t.home_currency || 'VND',
+    homeCurrency: (t.home_currency || 'VND').toUpperCase(),
   }));
 }
 
@@ -2360,7 +2438,7 @@ function getExpensesForTrip(trip) {
   return rawExpenses
     .filter(e => e.trip_id === trip.trip_id)
     .map(e => {
-      const currency = e.currency || '';
+      const currency = (e.currency || '').toUpperCase();
       const amount = Number(e.amount);
       const hc = trip.homeCurrency || 'VND';
       // rate: how many home-currency units = 1 foreign unit
@@ -2371,7 +2449,7 @@ function getExpensesForTrip(trip) {
       let splitWith = parseMembers(e.split_with);
       
       // FALLBACK: If splitWith empty and not a fund contribution, use all trip members
-      if ((!splitWith || splitWith.length === 0) && e.category !== 'fund') {
+      if ((!splitWith || splitWith.length === 0) && e.category !== CATEGORY_FUND) {
         // trip.members có thể là mảng (nếu gọi với trip đã parse qua getTripObjects())
         // hoặc chuỗi "A,B,C" (nếu gọi với trip thô từ rawTrips) - luôn ép về mảng để
         // tránh splitWith bị gán nhầm thành string (gây lỗi .join() ở chỗ dùng sau này).
@@ -2607,7 +2685,7 @@ function buildTripExportRows(trip) {
   const expenses = getExpensesForTrip(trip);
   const rawBalances = computeBalances(trip.members, expenses);
   const { peopleBalances } = splitCashFundBalance(rawBalances);
-  const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+  const hasCashFund = expenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
   const cashFundRemaining = computeCashFundRemaining(expenses);
   const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
   const usage = computeUsage(trip.members, expenses);
@@ -2623,7 +2701,7 @@ function buildTripExportRows(trip) {
     t('csv_col_receipt'),
   ]);
   expenses.slice().reverse().forEach(ex => {
-    const isFund = ex.category === 'fund';
+    const isFund = ex.category === CATEGORY_FUND;
     const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
     const memberShares = members.map(m => {
       if (isFund) return '';
@@ -2940,7 +3018,7 @@ function getWorkspaceSettlements() {
     const tripObj = rawTrips.find(t => t.trip_id === trip.trip_id);
     const expenses = getExpensesForTrip(tripObj);
     expenses.forEach(e => {
-      if (e.category !== 'payment') {
+      if (e.category !== CATEGORY_PAYMENT) {
         totalSpent += e.amountHome;
       }
     });
@@ -3135,7 +3213,7 @@ function render() {
           }
           
           // Track payments separately for balance adjustment
-          if (e.category === 'payment') {
+          if (e.category === CATEGORY_PAYMENT) {
             if (e.paidBy === member) {
               // They made a payment (already counted in paid above)
               paymentMade += e.amountHome;
@@ -3434,11 +3512,58 @@ function render() {
     } else if (expenses.length === 0) {
       html += `<p class="empty">${t('no_expense')}</p>`;
     } else {
-      html += `<div class="row" style="gap:8px; margin-bottom:8px;">
+      // Đếm số filter đang bật để hiện badge ngay cả khi đang thu gọn - người
+      // dùng biết ngay là có đang lọc hay không mà không cần mở ra xem.
+      const activeFilterCount = [
+        expenseFilter.person, expenseFilter.splitMember,
+        expenseFilter.category, (expenseFilter.datePreset && expenseFilter.datePreset !== 'all') ? '1' : '',
+      ].filter(Boolean).length;
+
+      // Dùng dạng link chữ nhẹ nhàng (không phải thanh header đầy đủ) - tránh
+      // nhìn giống 1 tiêu đề card thứ 2 cạnh tranh với "Chi tiêu · N" phía trên.
+      html += `<div style="margin-bottom:${filtersSectionExpanded ? '10px' : '4px'};">
+        <span data-action="toggleFiltersSection" style="cursor:pointer; font-size:12.5px; font-weight:600; color:var(--accent-text); display:inline-flex; align-items:center; gap:5px;">
+          ${t('filters_label')}${filtersSectionExpanded ? ' ▴' : ' ▾'}
+          ${activeFilterCount > 0 ? `<span style="background:var(--accent-bg); color:var(--accent-text); font-size:10.5px; font-weight:700; padding:0px 6px; border-radius:999px;">${activeFilterCount}</span>` : ''}
+        </span>
+      </div>`;
+
+      // Chip cho từng filter đang bật, xóa được TỪNG CÁI riêng lẻ bằng 1 chạm -
+      // không cần mở cả bảng ra mới thấy/đổi được đang lọc gì. Hiện được ngay cả
+      // khi bảng filter đang thu gọn. Dùng icon thay chữ tiền tố (bớt nhìn "kỹ
+      // thuật"), nền màu nhạt thay vì viền xám cho nhẹ nhàng hơn.
+      if (activeFilterCount > 0) {
+        const chips = [];
+        if (expenseFilter.person) chips.push({ key: 'person', icon: '👤', label: expenseFilter.person });
+        if (expenseFilter.splitMember) chips.push({ key: 'splitMember', icon: '🔀', label: expenseFilter.splitMember });
+        if (expenseFilter.category) {
+          const cat = CATEGORIES.find(c => (c.id || '__none__') === expenseFilter.category);
+          chips.push({ key: 'category', icon: cat ? cat.icon : '🔖', label: cat ? escapeHtml(categoryLabel(cat.id)) : '' });
+        }
+        if (expenseFilter.datePreset && expenseFilter.datePreset !== 'all') {
+          const dateLabelKeys = { last7: 'filter_date_last7', last30: 'filter_date_last30', week: 'filter_date_week', lastweek: 'filter_date_lastweek', month: 'filter_date_month', lastmonth: 'filter_date_lastmonth', custom: 'filter_date_custom' };
+          chips.push({ key: 'date', icon: '📅', label: t(dateLabelKeys[expenseFilter.datePreset] || 'filter_date_custom') });
+        }
+        html += `<div class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+          ${chips.map(c => `<span style="display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); border-radius:999px; padding:4px 8px 4px 10px; font-size:12px; font-weight:500; color:var(--accent-text);">
+            <span>${c.icon} ${c.label}</span>
+            <button data-action="removeFilterChip" data-filter-key="${c.key}" aria-label="${t('remove_filter_aria')}" style="border:none; background:rgba(0,0,0,0.08); cursor:pointer; color:inherit; font-size:10px; width:16px; height:16px; border-radius:50%; padding:0; line-height:1; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
+          </span>`).join('')}
+        </div>`;
+      }
+
+      if (filtersSectionExpanded) {
+      html += `<div class="row" style="gap:8px; margin-bottom:6px;">
         <select id="filterPerson" style="flex:1; min-width:0; height:34px; font-size:13px;">
           <option value="">${t('expense_filter_all_payer')}</option>
           ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${expenseFilter.person === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
         </select>
+        <select id="filterSplitMember" style="flex:1; min-width:0; height:34px; font-size:13px;">
+          <option value="">${t('expense_filter_all_split')}</option>
+          ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${expenseFilter.splitMember === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="row" style="gap:8px; margin-bottom:8px;">
         <select id="filterCategory" style="flex:1; min-width:0; height:34px; font-size:13px;">
           <option value="__all__">${t('filter_all_cat')}</option>
           ${CATEGORIES.map(c => `<option value="${c.id || '__none__'}" ${expenseFilter.category === (c.id || '__none__') ? 'selected' : ''}>${c.icon} ${escapeHtml(categoryLabel(c.id))}</option>`).join('')}
@@ -3469,6 +3594,7 @@ function render() {
       if (activePreset !== 'all') {
         html += `<div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">${t('filter_date_note')}</div>`;
       }
+      }
 
       const filtered = filterExpensesForView(expenses);
 
@@ -3491,7 +3617,7 @@ function render() {
           html += `<div class="expense-row">
             <div class="expense-main">
               <span class="cat-badge" style="${categoryBadgeStyle(e.category)}">${categoryIcon(e.category)} ${escapeHtml(categoryLabel(e.category))}</span><strong>${escapeHtml(e.paidBy)}</strong>${e.desc ? ' ' + t('expense_paid_for') + ' ' + escapeHtml(e.desc) : ' ' + t('expense_paid')}
-              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === 'fund' ? (appLang==='en'?'contributed to fund':'góp vào quỹ chung') : e.category === 'payment' ? (appLang==='en'?'paid to ':'thanh toán cho ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : (appLang==='en'?'split with ':'chia ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : (appLang==='en'?'everyone':'cả nhóm'))}</div>
+              <div class="expense-meta">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''} · ${e.category === CATEGORY_FUND ? (appLang==='en'?'contributed to fund':'góp vào quỹ chung') : e.category === CATEGORY_PAYMENT ? (appLang==='en'?'paid to ':'thanh toán cho ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : '?') : (appLang==='en'?'split with ':'chia ') + (e.splitWith.length > 0 ? e.splitWith.map(escapeHtml).join(', ') : (appLang==='en'?'everyone':'cả nhóm'))}</div>
             </div>
             <div class="row" style="gap:0; flex-wrap:nowrap;">
               <span class="amount">${isForeign
@@ -3514,7 +3640,7 @@ function render() {
           </div>`;
         }
 
-        const isFiltered = expenseFilter.person || expenseFilter.category || expenseFilter.dateFrom || expenseFilter.dateTo;
+        const isFiltered = expenseFilter.person || expenseFilter.splitMember || expenseFilter.category || expenseFilter.dateFrom || expenseFilter.dateTo;
         html += `<div class="total-line">${isFiltered ? t('filter_total') : t('total_spending')} <strong style="color:var(--text-primary)">${fmtHome(filteredTotal, trip.homeCurrency)}</strong></div>`;
       }
     }
@@ -3529,7 +3655,7 @@ function render() {
     if (trip.members.length > 0) {
       const rawBalances = computeBalances(trip.members, expenses);
       const { peopleBalances } = splitCashFundBalance(rawBalances);
-      const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+      const hasCashFund = expenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
       const cashFundRemaining = computeCashFundRemaining(expenses);
       const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
 
@@ -3668,6 +3794,8 @@ function render() {
 
   const fp = document.getElementById('filterPerson');
   if (fp) fp.addEventListener('change', e => { expenseFilter.person = e.target.value; expensePage = 1; render(); });
+  const fsm = document.getElementById('filterSplitMember');
+  if (fsm) fsm.addEventListener('change', e => { expenseFilter.splitMember = e.target.value; expensePage = 1; render(); });
   const fc = document.getElementById('filterCategory');
   if (fc) fc.addEventListener('change', e => {
     expenseFilter.category = e.target.value === '__all__' ? '' : e.target.value;
@@ -3750,10 +3878,21 @@ async function processQueue() {
   if (requestQueue.length === 0) refreshData(false);
 }
 
+// Deep clone dùng structuredClone() nếu trình duyệt hỗ trợ (nhanh hơn, xử lý
+// đúng nhiều kiểu dữ liệu hơn JSON.stringify - vd Date, không lỗi với vòng lặp
+// tham chiếu) - fallback về JSON.parse(JSON.stringify()) cho trình duyệt cũ
+// (Safari <15.4, WebView Android đời cũ) chưa hỗ trợ structuredClone.
+function deepClone(obj) {
+  if (typeof structuredClone === 'function') {
+    try { return structuredClone(obj); } catch (e) { /* rơi xuống fallback nếu có gì đó không clone được */ }
+  }
+  return JSON.parse(JSON.stringify(obj));
+}
+
 async function withSaving(applyLocal, sendRequest) {
   // Chụp snapshot TRƯỚC khi applyLocal (để có thể hoàn tác đúng về trạng thái này nếu lỗi)
-  const snapshotTrips = JSON.parse(JSON.stringify(rawTrips));
-  const snapshotExpenses = JSON.parse(JSON.stringify(rawExpenses));
+  const snapshotTrips = deepClone(rawTrips);
+  const snapshotExpenses = deepClone(rawExpenses);
 
   if (applyLocal) applyLocal();
   render();
@@ -3775,6 +3914,7 @@ function handleAction(e) {
   const payload = e.currentTarget.dataset.payload;
   const scope = e.currentTarget.dataset.scope;
   const preset = e.currentTarget.dataset.preset;
+  const filterKey = e.currentTarget.dataset.filterKey;
 
   if (action === 'openMemberDetail') { window.app.openMemberDetail(member); return; }
   if (action === 'viewReceipt') { window.app.viewReceipt(url); return; }
@@ -3782,6 +3922,16 @@ function handleAction(e) {
   if (action === 'restoreTrip') { window.app.restoreTrip(payload); return; }
   if (action === 'quickAddMember') { window.app.addMember(name); return; }
   if (action === 'toggleMembersSection') { membersSectionExpanded = !membersSectionExpanded; render(); return; }
+  if (action === 'toggleFiltersSection') { filtersSectionExpanded = !filtersSectionExpanded; render(); return; }
+  if (action === 'removeFilterChip') {
+    if (filterKey === 'person') expenseFilter.person = '';
+    else if (filterKey === 'splitMember') expenseFilter.splitMember = '';
+    else if (filterKey === 'category') expenseFilter.category = '';
+    else if (filterKey === 'date') { expenseFilter.dateFrom = ''; expenseFilter.dateTo = ''; expenseFilter.datePreset = 'all'; }
+    expensePage = 1;
+    render();
+    return;
+  }
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
   if (action === 'setDatePreset') {
     const range = computeDatePreset(preset);
@@ -3859,7 +4009,7 @@ function handleAction(e) {
       split_with: to,
       date: now.toISOString().slice(0, 10),
       time: nowTimeStr(),
-      category: 'payment',
+      category: CATEGORY_PAYMENT,
     };
     withSaving(
       () => rawExpenses.push({ ...expenseData }),
@@ -3872,9 +4022,10 @@ function handleAction(e) {
   if (action === 'selectTrip') {
     activeTripId = id;
     if (id !== 'WORKSPACE' && id !== 'HISTORY') lastRealTripId = id;
-    expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+    expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
     expensePage = 1;
     membersSectionExpanded = false;
+    filtersSectionExpanded = false;
     render();
   }
   if (action === 'openNewTrip') { modal = 'newTrip'; newTripName = ''; render(); }
@@ -3882,14 +4033,15 @@ function handleAction(e) {
   if (action === 'openRenameTrip') {
     const trip = rawTrips.find(t => t.trip_id === activeTripId);
     renameTripDraft = trip.trip_name;
-    renameTripUseForeign = !!trip.foreign_currency;
-    renameTripHomeCurrency = trip.home_currency || 'VND';
-    const isKnownCurrency = CURRENCIES.some(c => c.code === trip.foreign_currency);
-    if (trip.foreign_currency && !isKnownCurrency) {
+    const rawForeignCurrency = (trip.foreign_currency || '').toUpperCase();
+    renameTripUseForeign = !!rawForeignCurrency;
+    renameTripHomeCurrency = (trip.home_currency || 'VND').toUpperCase();
+    const isKnownCurrency = CURRENCIES.some(c => c.code === rawForeignCurrency);
+    if (rawForeignCurrency && !isKnownCurrency) {
       renameTripCurrency = '__custom__';
-      renameTripCustomCurrency = trip.foreign_currency;
+      renameTripCustomCurrency = rawForeignCurrency;
     } else {
-      renameTripCurrency = trip.foreign_currency || 'USD';
+      renameTripCurrency = rawForeignCurrency || 'USD';
       renameTripCustomCurrency = '';
     }
     renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
@@ -3953,7 +4105,7 @@ function handleAction(e) {
     const now = new Date();
     // Nếu trip đã có khoản góp quỹ (quỹ chung đã được khởi tạo),
     // mặc định chọn "Quỹ chung" làm người trả vì đa số chi tiêu sẽ từ quỹ.
-    const hasFund = rawExpenses.some(e => e.trip_id === activeTripId && e.category === 'fund');
+    const hasFund = rawExpenses.some(e => e.trip_id === activeTripId && e.category === CATEGORY_FUND);
     expDraft = {
       id: null,
       paidBy: hasFund ? CASH_FUND_NAME : (trip.members[0] || ''),
@@ -4011,7 +4163,7 @@ function handleAction(e) {
   if (action === 'exportWorkspaceImage') {
     const { members, allExpenses, balances, homeCurrency } = getWorkspaceExportData();
     const { peopleBalances } = splitCashFundBalance(balances);
-    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const hasCashFund = allExpenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(allExpenses);
     const settlements = getWorkspaceSettlements().settlements;
     const netBalanceForImage = {};
@@ -4029,7 +4181,7 @@ function handleAction(e) {
 function buildWorkspaceExportRows() {
   const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
   const { peopleBalances } = splitCashFundBalance(balances);
-  const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+  const hasCashFund = allExpenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
   const cashFundRemaining = computeCashFundRemaining(allExpenses);
   const settlements = getWorkspaceSettlements().settlements;
 
@@ -4041,7 +4193,7 @@ function buildWorkspaceExportRows() {
     t('csv_col_receipt'),
   ]);
   allExpenses.slice().reverse().forEach(ex => {
-    const isFund = ex.category === 'fund';
+    const isFund = ex.category === CATEGORY_FUND;
     const splitMembers = ex.splitWith.length > 0 ? ex.splitWith : members;
     const memberShares = members.map(m => {
       if (isFund) return '';
@@ -4120,7 +4272,7 @@ function buildWorkspaceExportRows() {
     const expenses = getExpensesForTrip(trip);
     const rawBalances = computeBalances(trip.members, expenses);
     const { peopleBalances } = splitCashFundBalance(rawBalances);
-    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const hasCashFund = expenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
     const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     generateSummaryImage(trip, expenses, peopleBalances, settlements, hasCashFund ? cashFundRemaining : null);
@@ -4144,7 +4296,7 @@ function buildWorkspaceExportRows() {
     const expenses = getExpensesForTrip(trip);
     const rawBalances = computeBalances(trip.members, expenses);
     const { peopleBalances } = splitCashFundBalance(rawBalances);
-    const hasCashFund = expenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const hasCashFund = expenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(expenses);
     const settlements = simplifyDebts(peopleBalances, trip.homeCurrency);
     const usage = computeUsage(trip.members, expenses);
@@ -4197,7 +4349,7 @@ function buildWorkspaceExportRows() {
   if (action === 'copyWorkspaceSummary') {
     const { members, allExpenses, paid, usage, balances, homeCurrency } = getWorkspaceExportData();
     const { peopleBalances } = splitCashFundBalance(balances);
-    const hasCashFund = allExpenses.some(e => e.category === 'fund' || e.paidBy === CASH_FUND_NAME);
+    const hasCashFund = allExpenses.some(e => e.category === CATEGORY_FUND || e.paidBy === CASH_FUND_NAME);
     const cashFundRemaining = computeCashFundRemaining(allExpenses);
     const settlements = getWorkspaceSettlements().settlements;
     const settlementsNet = computeSettlementsNet(members, allExpenses);
@@ -4386,26 +4538,26 @@ function renderModal() {
     const isForeign = expDraft.currency === trip.foreignCurrency && hasForeign;
     // 3 tab kiểu Tricount: Chi tiêu / Góp quỹ / Thanh toán - suy ra từ category
     // hiện tại của expDraft (fund/payment là 2 loại đặc biệt, còn lại đều là "Chi tiêu").
-    const currentTab = expDraft.category === 'fund' ? 'fund' : expDraft.category === 'payment' ? 'payment' : 'expense';
-    const expenseOnlyCategories = CATEGORIES.filter(c => c.id !== 'fund' && c.id !== 'payment');
+    const currentTab = expDraft.category === CATEGORY_FUND ? CATEGORY_FUND : expDraft.category === CATEGORY_PAYMENT ? CATEGORY_PAYMENT : 'expense';
+    const expenseOnlyCategories = CATEGORIES.filter(c => c.id !== CATEGORY_FUND && c.id !== CATEGORY_PAYMENT);
     overlay.innerHTML = `<div class="modal">
       <h2>${expDraft && expDraft.id ? t('edit_expense_title') : t('add_expense_title')}</h2>
       <div class="field">
         <div class="row" style="background:var(--surface-2); border-radius:999px; padding:3px; gap:2px;">
-          <button type="button" data-set-expense-tab="expense" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === 'expense' ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_expense')}</button>
-          <button type="button" data-set-expense-tab="fund" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === 'fund' ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_fund')}</button>
-          <button type="button" data-set-expense-tab="payment" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === 'payment' ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_payment')}</button>
+          <button type="button" data-set-expense-tab="expense" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_EXPENSE_TAB ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_expense')}</button>
+          <button type="button" data-set-expense-tab="fund" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_FUND ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_fund')}</button>
+          <button type="button" data-set-expense-tab="payment" style="flex:1; border:none; border-radius:999px; padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; ${currentTab === CATEGORY_PAYMENT ? 'background:var(--surface); box-shadow:0 1px 3px rgba(26,26,46,0.12); color:var(--text-primary);' : 'background:none; color:var(--text-secondary);'}">${t('tab_payment')}</button>
         </div>
       </div>
       <div class="row" style="gap:8px;">
-        <div class="field" style="flex:${currentTab === 'expense' ? '1.1' : '1'};">
+        <div class="field" style="flex:${currentTab === CATEGORY_EXPENSE_TAB ? '1.1' : '1'};">
           <label>${t('paid_by_label')}</label>
           <select id="paidBySelect">
             ${trip.members.map(m => `<option value="${escapeHtml(m)}" ${m === expDraft.paidBy ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
             <option value="${CASH_FUND_NAME}" ${expDraft.paidBy === CASH_FUND_NAME ? 'selected' : ''}>${t('cash_fund_payer_option')}</option>
           </select>
         </div>
-        ${currentTab === 'expense' ? `
+        ${currentTab === CATEGORY_EXPENSE_TAB ? `
         <div class="field" style="flex:1;">
           <label>${t('cat_label')}</label>
           <select id="categorySelect">
@@ -4447,7 +4599,7 @@ function renderModal() {
           <input id="descInput" placeholder="${t('desc_placeholder')}" value="${escapeHtml(expDraft.desc)}" style="flex:1;">
           ${expDraft.receiptPreview ? `
             <div style="position:relative; width:40px; height:40px; flex-shrink:0;">
-              <img id="receiptThumb" src="${expDraft.receiptPreview}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border); cursor:pointer; display:block;">
+              <img id="receiptThumb" src="${isValidReceiptUrl(expDraft.receiptPreview) ? escapeHtml(expDraft.receiptPreview) : ''}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border); cursor:pointer; display:block;">
               <button type="button" id="removeReceiptBtn" aria-label="${t('remove_receipt_aria')}" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:10px; line-height:1; cursor:pointer;">✕</button>
             </div>
           ` : `
@@ -4458,7 +4610,7 @@ function renderModal() {
         </div>
         <input type="file" id="receiptInput" accept="image/*" style="display:none;">
       </div>
-      ${currentTab === 'expense' ? `
+      ${currentTab === CATEGORY_EXPENSE_TAB ? `
       <div class="field">
         <div class="row" style="justify-content:space-between; align-items:baseline; margin-bottom:6px;">
           <label style="margin:0;">${t('split_label')}</label>
@@ -4469,7 +4621,7 @@ function renderModal() {
         <div class="row">
           ${trip.members.map(m => `<span class="pill ${expDraft.splitWith.includes(m) ? 'active' : ''}" data-toggle-member="${escapeHtml(m)}">${escapeHtml(m)}</span>`).join('')}
         </div>
-      </div>` : currentTab === 'fund' ? `
+      </div>` : currentTab === CATEGORY_FUND ? `
       <div style="font-size:12px; color:var(--text-muted); margin:-6px 0 14px;">
         ${t('fund_contribution_note')}
       </div>` : `
@@ -4598,11 +4750,11 @@ function renderModal() {
     overlay.querySelectorAll('[data-set-expense-tab]').forEach(el => {
       el.addEventListener('click', () => {
         const tab = el.dataset.setExpenseTab;
-        if (tab === 'fund') {
-          expDraft.category = 'fund';
-        } else if (tab === 'payment') {
-          expDraft.category = 'payment';
-        } else if (expDraft.category === 'fund' || expDraft.category === 'payment') {
+        if (tab === CATEGORY_FUND) {
+          expDraft.category = CATEGORY_FUND;
+        } else if (tab === CATEGORY_PAYMENT) {
+          expDraft.category = CATEGORY_PAYMENT;
+        } else if (expDraft.category === CATEGORY_FUND || expDraft.category === CATEGORY_PAYMENT) {
           // Chuyển từ Góp quỹ/Thanh toán về Chi tiêu thường - reset về category mặc định
           expDraft.category = '';
         }
@@ -4674,7 +4826,7 @@ window.app = {
   navGoToTrip() {
     if (lastRealTripId) {
       activeTripId = lastRealTripId;
-      expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+      expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
       expensePage = 1;
       render();
     } else {
@@ -4709,7 +4861,7 @@ window.app = {
     }
     if (activeTripId !== lastRealTripId) {
       activeTripId = lastRealTripId;
-      expenseFilter = { person: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
+      expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
       expensePage = 1;
     }
     handleAction({ currentTarget: { dataset: { action: 'openAddExpense' } } });
@@ -4758,13 +4910,13 @@ window.app = {
   },
 
   viewReceipt(url) {
-    if (!url) return;
+    if (!url || !isValidReceiptUrl(url)) { showToast(t('invalid_receipt_url')); return; }
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = 'display:flex; align-items:center; justify-content:center; padding:24px; z-index:9999;';
     overlay.innerHTML = `
       <div style="position:relative; max-width:92vw; max-height:92vh;">
-        <img src="${url}" style="max-width:92vw; max-height:92vh; border-radius:var(--radius); display:block; box-shadow:var(--shadow-modal);">
+        <img src="${escapeHtml(url)}" style="max-width:92vw; max-height:92vh; border-radius:var(--radius); display:block; box-shadow:var(--shadow-modal);">
         <button aria-label="${t('aria_close')}" style="position:absolute; top:-14px; right:-14px; width:32px; height:32px; border-radius:50%; background:var(--surface); border:1px solid var(--border); font-size:16px; cursor:pointer;" onclick="this.closest('.modal-overlay').remove()">✕</button>
       </div>`;
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -5150,7 +5302,7 @@ window.app = {
         split_with: d.receiver,
         date: now.toISOString().slice(0, 10),
         time: nowTimeStr(),
-        category: 'payment',
+        category: CATEGORY_PAYMENT,
       };
       
       // Đồng bộ lên server (trước đây chỉ lưu tạm local, mất khi tải lại trang)
@@ -5203,7 +5355,7 @@ window.app = {
           split_with: d.receiver,
           date: now.toISOString().slice(0, 10),
           time: nowTimeStr(),
-          category: 'payment'
+          category: CATEGORY_PAYMENT
         };
         
         // Use withSaving to sync to server (like markSettled)
@@ -5260,7 +5412,7 @@ window.app = {
         split_with: s.to,
         date: now.toISOString().slice(0, 10),
         time: nowTimeStr(),
-        category: 'payment'
+        category: CATEGORY_PAYMENT
       };
       
       // Use withSaving to sync to server (like markSettled & All Trips)
@@ -5415,14 +5567,14 @@ window.app = {
       showToast(t('fill_required'));
       return;
     }
-    const isPayment = expDraft.category === 'payment';
+    const isPayment = expDraft.category === CATEGORY_PAYMENT;
     if (isPayment && expDraft.splitWith.length !== 1) {
       showToast(t('payment_error'));
       return;
     }
     modal = null;
     const isEditing = !!expDraft.id;
-    const isFund = expDraft.category === 'fund';
+    const isFund = expDraft.category === CATEGORY_FUND;
     // Khoản góp quỹ chỉ cộng cho người góp, không chia cho ai khác -
     // tận dụng cơ chế splitWith sẵn có bằng cách gán đúng 1 người là chính họ.
     const splitWith = isFund ? [] : expDraft.splitWith;
