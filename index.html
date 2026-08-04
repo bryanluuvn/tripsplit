@@ -3773,8 +3773,8 @@ function render() {
     if (btns[4]) btns[4].classList.toggle('active', activeTripId === 'HISTORY');
     // Khách qua link share (TRIP_LOCKED_ID): ẩn All Trips + History, vì khách
     // không có quyền xem các trip khác hay lịch sử toàn workspace.
-    if (btns[1]) btns[1].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
-    if (btns[4]) btns[4].style.visibility = TRIP_LOCKED_ID ? 'hidden' : 'visible';
+    if (btns[1]) btns[1].style.display = TRIP_LOCKED_ID ? 'none' : 'flex';
+    if (btns[4]) btns[4].style.display = TRIP_LOCKED_ID ? 'none' : 'flex';
 
     // Chữ nhỏ dưới icon (nằm ngoài phần <script> nên không dùng được ${t(...)} lúc
     // render HTML tĩnh - cập nhật text theo ngôn ngữ ở đây bằng JS thật.
