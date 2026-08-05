@@ -1322,6 +1322,14 @@ function categoryColor(id) {
 // CHỈ dùng để HIỂN THỊ (expDraft.amountInputRaw vẫn giữ nguyên chuỗi số sạch
 // không dấu, để parseFloat() luôn đúng). Chỉ định dạng phần nguyên, giữ nguyên
 // phần thập phân (nếu đang gõ dở, vd "85000.5") để không phá luồng gõ dở dang.
+// Phát hiện thiết bị có con trỏ chính xác + hover được (chuột/trackpad, thường
+// là laptop/desktop) hay không - dùng tiêu chuẩn CSS media feature thay vì đoán
+// qua kích thước màn hình hay user-agent (dễ sai). Các thiết bị này KHÔNG cần
+// ép dùng bàn phím số tùy chỉnh - gõ bằng bàn phím thật vẫn tiện hơn.
+function hasPrecisePointer() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
 function formatAmountDisplay(raw) {
   if (!raw) return '';
   const isVi = appLang !== 'en';
@@ -4713,8 +4721,8 @@ function renderModal() {
       <div class="field">
         <label>${formIconMoney()} ${t('amount_label')} ${isForeign ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>` : ''}</label>
         <div style="position:relative;">
-          <input id="amountInput" type="text" inputmode="none" readonly placeholder="${isForeign ? t('amount_placeholder_foreign') : t('amount_placeholder_vnd')}" value="${escapeHtml(formatAmountDisplay(expDraft.amountInputRaw))}" class="amount-input-large" style="caret-color:var(--accent); cursor:pointer; padding-right:${expDraft.amount ? '84px' : '12px'};">
-          <span style="position:absolute; top:50%; right:12px; transform:translateY(-50%); font-size:11px; color:var(--text-muted); pointer-events:none; white-space:nowrap;" id="amountPreview">${expDraft.amount ? '≈' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</span>
+          <input id="amountInput" type="text" inputmode="${hasPrecisePointer() ? 'decimal' : 'none'}" ${hasPrecisePointer() ? '' : 'readonly'} placeholder="${isForeign ? t('amount_placeholder_foreign') : t('amount_placeholder_vnd')}" value="${escapeHtml(formatAmountDisplay(expDraft.amountInputRaw))}" class="amount-input-large" style="caret-color:var(--accent); cursor:${hasPrecisePointer() ? 'text' : 'pointer'}; padding-right:${expDraft.amount ? '92px' : '12px'};">
+          <span style="position:absolute; top:50%; right:12px; transform:translateY(-50%); font-size:13px; font-weight:500; color:var(--text-muted); pointer-events:none; white-space:nowrap;" id="amountPreview">${expDraft.amount ? '≈' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</span>
         </div>
         ${amountKeypadOpen ? `
         <div class="amount-keypad">
@@ -4884,13 +4892,29 @@ function renderModal() {
       }
     }
 
-    // Ô Số tiền giờ readonly (chặn bàn phím mặc định của máy) - bấm vào sẽ mở
-    // bàn phím số tùy chỉnh riêng bên dưới, có nút "000" tiện gõ số tròn.
+    // Thiết bị có chuột/trackpad (laptop/desktop): gõ trực tiếp bằng bàn phím
+    // thật như input bình thường, không ép mở bàn phím tùy chỉnh (bất tiện hơn
+    // trên máy có sẵn bàn phím vật lý). Thiết bị chỉ có cảm ứng: bấm vào ô sẽ
+    // mở bàn phím số tùy chỉnh riêng bên dưới, có nút "000" tiện gõ số tròn.
     const amountInputEl = document.getElementById('amountInput');
     if (amountInputEl) {
-      amountInputEl.addEventListener('click', () => {
-        if (!amountKeypadOpen) { amountKeypadOpen = true; renderModal(); }
-      });
+      if (hasPrecisePointer()) {
+        amountInputEl.addEventListener('input', e => {
+          // Chỉ giữ lại chữ số và tối đa 1 dấu chấm - lọc bỏ mọi ký tự khác
+          // (kể cả dấu phân cách hàng nghìn nếu người dùng vô tình gõ/dán vào).
+          let raw = e.target.value.replace(/[^\d.]/g, '');
+          const firstDot = raw.indexOf('.');
+          if (firstDot !== -1) raw = raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, '');
+          expDraft.amountInputRaw = raw;
+          updateAmountFromRaw();
+          e.target.value = formatAmountDisplay(raw);
+          e.target.style.paddingRight = expDraft.amount ? '92px' : '12px';
+        });
+      } else {
+        amountInputEl.addEventListener('click', () => {
+          if (!amountKeypadOpen) { amountKeypadOpen = true; renderModal(); }
+        });
+      }
     }
     overlay.querySelectorAll('[data-keypad-key]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -4923,7 +4947,7 @@ function renderModal() {
           // Chừa chỗ bên phải cho badge "≈..." khi có giá trị hợp lệ, tránh đè
           // lên số đang gõ - phải cập nhật LẠI mỗi lần gõ (không chỉ lúc render
           // đầu), vì trạng thái "có/không có giá trị" thay đổi liên tục khi gõ.
-          inputEl.style.paddingRight = expDraft.amount ? '84px' : '12px';
+          inputEl.style.paddingRight = expDraft.amount ? '92px' : '12px';
         }
       });
     });
