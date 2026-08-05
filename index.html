@@ -385,6 +385,26 @@
     đã gõ - tránh nhìn giống như đã có sẵn số tiền, dễ gây nhầm lẫn. */
     font-size: 14px; font-weight: 400; color: var(--text-muted);
   }
+  .datetime-input-compact {
+    /* Ngày/giờ ít khi cần sửa (thường đã đúng sẵn "hôm nay, bây giờ") - làm nhỏ
+    gọn, ít nổi bật hơn Amount/Paid by, nhưng VẪN LÀ input thật, bấm 1 phát mở
+    lịch/đồng hồ ngay, không qua bước "Sửa" trung gian nào (đã thử và bị phản
+    hồi là bất tiện, thêm thao tác thừa cho 1 field ít khi cần đổi). */
+    height: 34px; font-size: 13px; padding: 0 8px;
+    background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .datetime-input-compact:focus {
+    background: var(--surface-2); border-color: var(--accent); box-shadow: none;
+  }
+  .amount-keypad { margin-top: 10px; }
+  .amount-keypad-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .amount-key {
+    flex: 1; height: 48px; font-size: 18px; font-weight: 600;
+    background: var(--surface-2); border: none; color: var(--text-primary);
+    border-radius: var(--radius-sm);
+  }
+  .amount-key:active { background: var(--accent-bg); }
+  .amount-key-backspace { font-size: 16px; color: var(--danger); }
 
   /* Category summary chart */
   .cat-chart-row {
@@ -579,6 +599,8 @@ const APP_TRANSLATIONS = {
     select_all_btn: 'Chọn tất cả',
     deselect_all_btn: 'Bỏ chọn tất cả',
     edit_link: 'Sửa',
+    keypad_done: 'Xong',
+    aria_backspace: 'Xóa 1 ký tự',
     btn_save_expense: 'Lưu chi tiêu',
     tip_balance: "Muc Tong quan tung nguoi cho thay so du thuc te.",
     tip_foreign: "Khi tao trip, tick Co chi tieu bang ngoai te.",
@@ -722,7 +744,7 @@ const APP_TRANSLATIONS = {
     member_rename_note_suffix: 'sẽ tự cập nhật theo tên mới.',
     amount_hint_vnd: '(đơn vị: ngàn đồng)',
     amount_hint_unit_prefix: '(đơn vị:',
-    amount_placeholder_vnd: 'ví dụ 90 = 90.000đ',
+    amount_placeholder_vnd: 'ví dụ 90000',
     export_csv_aria: 'Xuất CSV',
     export_sheets_aria: 'Xuất ra Google Sheets',
     export_share_label: 'Xuất / chia sẻ kết quả',
@@ -896,6 +918,8 @@ const APP_TRANSLATIONS = {
     select_all_btn: 'Select all',
     deselect_all_btn: 'Deselect all',
     edit_link: 'Edit',
+    keypad_done: 'Done',
+    aria_backspace: 'Delete last digit',
     btn_save_expense: 'Save expense',
     tip_balance: "Check Per-person overview to see real balance after each share.",
     tip_foreign: "When creating a trip, check Has foreign currency expenses.",
@@ -1034,7 +1058,7 @@ const APP_TRANSLATIONS = {
     member_rename_note_suffix: 'will automatically update to the new name.',
     amount_hint_vnd: '(unit: thousand VND)',
     amount_hint_unit_prefix: '(unit:',
-    amount_placeholder_vnd: 'e.g. 90 = 90,000₫',
+    amount_placeholder_vnd: 'e.g. 90000',
     export_csv_aria: 'Export CSV',
     export_sheets_aria: 'Export to Google Sheets',
     export_share_label: 'Export / share results',
@@ -2318,6 +2342,7 @@ let activeTripId = null;
 let lastRealTripId = null; // trip cụ thể gần nhất đang xem (khác WORKSPACE/HISTORY) - dùng cho bottom nav
 let modal = null;
 let expDraft = { id: null, paidBy: '', amount: '', currency: '', amountInputRaw: '', desc: '', splitWith: [], date: '', time: '', category: '', receiptPreview: null, receiptData: null, receiptMime: null, removeReceipt: false };
+let amountKeypadOpen = false; // bàn phím số tùy chỉnh cho ô Số tiền (thay bàn phím mặc định)
 let memberInput = '';
 let newTripName = '';
 let newTripUseForeign = false;
@@ -4202,7 +4227,7 @@ function handleAction(e) {
       category: '',
       receiptPreview: null, receiptData: null, receiptMime: null, removeReceipt: false,
     };
-    modal = 'addExpense'; render();
+    modal = 'addExpense'; amountKeypadOpen = false; render();
   }
 
   if (action === 'editExpense') {
@@ -4215,7 +4240,7 @@ function handleAction(e) {
       paidBy: exp.paid_by,
       amount: String(exp.amount),
       currency,
-      amountInputRaw: currency ? String(amountNum) : (trip.homeCurrency === 'VND' ? String(amountNum / 1000) : String(amountNum)),
+      amountInputRaw: String(amountNum),
       desc: exp.desc,
       splitWith: parseMembers(exp.split_with),
       date: exp.date,
@@ -4223,7 +4248,7 @@ function handleAction(e) {
       category: exp.category || '',
       receiptPreview: exp.receipt_url || null, receiptData: null, receiptMime: null, removeReceipt: false,
     };
-    modal = 'addExpense'; render();
+    modal = 'addExpense'; amountKeypadOpen = false; render();
   }
 
   if (action === 'deleteExpense') {
@@ -4661,24 +4686,34 @@ function renderModal() {
         </div>
       </div>` : ''}
       <div class="field">
-        <label>${formIconMoney()} ${t('amount_label')} ${isForeign
-          ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>`
-          : (trip.homeCurrency || 'VND') === 'VND'
-            ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_vnd')}</span>`
-            : `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.homeCurrency)})</span>`}
-        </label>
-        <input id="amountInput" type="number" step="any" placeholder="${isForeign ? t('amount_placeholder_foreign') : (trip.homeCurrency || 'VND') === 'VND' ? t('amount_placeholder_vnd') : t('amount_placeholder')}" value="${expDraft.amountInputRaw}" class="amount-input-large">
+        <label>${formIconMoney()} ${t('amount_label')} ${isForeign ? `<span style="color:var(--text-muted); font-weight:400;">${t('amount_hint_unit_prefix')} ${escapeHtml(trip.foreignCurrency)})</span>` : ''}</label>
+        <input id="amountInput" type="text" inputmode="none" readonly placeholder="${isForeign ? t('amount_placeholder_foreign') : t('amount_placeholder_vnd')}" value="${escapeHtml(expDraft.amountInputRaw)}" class="amount-input-large" style="caret-color:var(--accent); cursor:pointer;">
         <div style="font-size:12px; color:var(--text-muted); margin-top:4px;" id="amountPreview">${expDraft.amount ? '= ' + fmtHome(isForeign ? parseFloat(expDraft.amount) * (parseFloat(trip.exchangeRate) || 0) : parseFloat(expDraft.amount), trip.homeCurrency) : ''}</div>
-      </div>
-      <div class="row" style="gap:8px;">
-        <div class="field" style="flex:1;">
-          <label>${t('date_label')}</label>
-          <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}">
-        </div>
-        <div class="field" style="flex:1;">
-          <label>${t('time_label')}</label>
-          <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}">
-        </div>
+        ${amountKeypadOpen ? `
+        <div class="amount-keypad">
+          <div class="amount-keypad-row">
+            <button type="button" class="amount-key" data-keypad-key="1">1</button>
+            <button type="button" class="amount-key" data-keypad-key="2">2</button>
+            <button type="button" class="amount-key" data-keypad-key="3">3</button>
+          </div>
+          <div class="amount-keypad-row">
+            <button type="button" class="amount-key" data-keypad-key="4">4</button>
+            <button type="button" class="amount-key" data-keypad-key="5">5</button>
+            <button type="button" class="amount-key" data-keypad-key="6">6</button>
+          </div>
+          <div class="amount-keypad-row">
+            <button type="button" class="amount-key" data-keypad-key="7">7</button>
+            <button type="button" class="amount-key" data-keypad-key="8">8</button>
+            <button type="button" class="amount-key" data-keypad-key="9">9</button>
+          </div>
+          <div class="amount-keypad-row">
+            <button type="button" class="amount-key" data-keypad-key="000">000</button>
+            <button type="button" class="amount-key" data-keypad-key="0">0</button>
+            <button type="button" class="amount-key" data-keypad-key=".">.</button>
+            <button type="button" class="amount-key amount-key-backspace" data-keypad-key="backspace" aria-label="${t('aria_backspace')}">⌫</button>
+          </div>
+          <button type="button" class="primary" data-keypad-key="done" style="width:100%; margin-top:8px; height:40px;">${t('keypad_done')}</button>
+        </div>` : ''}
       </div>
       <div class="field">
         <label>${formIconNote()} ${t('desc_label')}</label>
@@ -4719,6 +4754,10 @@ function renderModal() {
         </div>
         <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">${t('payment_note')}</div>
       </div>`}
+      <div class="row" style="gap:6px; margin:10px 0 4px;">
+        <input id="dateInput" type="date" value="${escapeHtml(expDraft.date)}" class="datetime-input-compact" style="flex:1.3;">
+        <input id="timeInput" type="time" value="${escapeHtml(expDraft.time)}" class="datetime-input-compact" style="flex:1;">
+      </div>
       <div class="row" style="justify-content:flex-end; margin-top: 8px;">
         <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
         <button class="primary" onclick="window.app.submitExpense()">${expDraft && expDraft.id ? t('save_changes_btn') : t('save_expense_btn')}</button>
@@ -4803,25 +4842,52 @@ function renderModal() {
     function updateAmountFromRaw() {
       const isForeign = expDraft.currency === trip.foreignCurrency && !!trip.foreignCurrency;
       const typed = parseFloat(expDraft.amountInputRaw);
-      if (isNaN(typed)) {
-        expDraft.amount = '';
-      } else {
-        expDraft.amount = isForeign ? String(typed) : (trip.homeCurrency === 'VND' ? String(typed * 1000) : String(typed));
-      }
+      expDraft.amount = isNaN(typed) ? '' : String(typed);
       const preview = document.getElementById('amountPreview');
       if (preview) {
         if (isNaN(typed) || typed <= 0) {
           preview.textContent = '';
         } else {
-          const vnd = isForeign ? typed * (parseFloat(trip.exchangeRate) || 0) : (trip.homeCurrency === 'VND' ? typed * 1000 : typed);
+          const vnd = isForeign ? typed * (parseFloat(trip.exchangeRate) || 0) : typed;
           preview.textContent = '= ' + fmtHome(vnd, trip.homeCurrency);
         }
       }
     }
 
-    document.getElementById('amountInput').addEventListener('input', e => {
-      expDraft.amountInputRaw = e.target.value;
-      updateAmountFromRaw();
+    // Ô Số tiền giờ readonly (chặn bàn phím mặc định của máy) - bấm vào sẽ mở
+    // bàn phím số tùy chỉnh riêng bên dưới, có nút "000" tiện gõ số tròn.
+    const amountInputEl = document.getElementById('amountInput');
+    if (amountInputEl) {
+      amountInputEl.addEventListener('click', () => {
+        if (!amountKeypadOpen) { amountKeypadOpen = true; renderModal(); }
+      });
+    }
+    overlay.querySelectorAll('[data-keypad-key]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.keypadKey;
+        let raw = expDraft.amountInputRaw || '';
+        if (key === 'backspace') {
+          raw = raw.slice(0, -1);
+        } else if (key === 'done') {
+          amountKeypadOpen = false;
+          expDraft.amountInputRaw = raw;
+          updateAmountFromRaw();
+          renderModal();
+          return;
+        } else if (key === '.') {
+          // Chỉ cho phép 1 dấu chấm - bấm thêm lần nữa thì bỏ qua, không nối thêm.
+          if (!raw.includes('.')) raw = (raw || '0') + '.';
+        } else {
+          // Số đơn (0-9) hoặc "000" - nối thẳng vào cuối, không cho gõ "0" ở vị
+          // trí đầu tiên (tránh "007" nhìn lạ, dù parseFloat vẫn hiểu đúng).
+          if (raw === '0') raw = '';
+          raw += key;
+        }
+        expDraft.amountInputRaw = raw;
+        updateAmountFromRaw();
+        const inputEl = document.getElementById('amountInput');
+        if (inputEl) inputEl.value = raw;
+      });
     });
 
     overlay.querySelectorAll('[data-set-currency]').forEach(el => {
