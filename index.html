@@ -4899,16 +4899,28 @@ function renderModal() {
     const amountInputEl = document.getElementById('amountInput');
     if (amountInputEl) {
       if (hasPrecisePointer()) {
+        // QUAN TRỌNG: khi đang gõ trực tiếp bằng bàn phím thật, KHÔNG tự chèn
+        // dấu phân cách hàng nghìn vào giữa lúc gõ - vì lần gõ tiếp theo sẽ đọc
+        // lại đúng chuỗi đã có dấu chấm đó, hiểu nhầm dấu chấm mình vừa tự thêm
+        // thành dấu thập phân (gõ 12000 -> hiện "1.200" rồi gõ "0" tiếp -> đọc
+        // nhầm "1.2000" thành số thập phân 1.2 -> ra kết quả sai be bét).
+        // Chỉ định dạng đẹp (có dấu phân cách) lúc rời khỏi ô (blur) - an toàn vì
+        // lúc đó không còn gõ tiếp gì nữa; lúc bấm vào lại (focus) thì trả về
+        // dạng số sạch để gõ tiếp không bị lỗi tương tự.
         amountInputEl.addEventListener('input', e => {
-          // Chỉ giữ lại chữ số và tối đa 1 dấu chấm - lọc bỏ mọi ký tự khác
-          // (kể cả dấu phân cách hàng nghìn nếu người dùng vô tình gõ/dán vào).
+          // Chỉ giữ lại chữ số và tối đa 1 dấu chấm - lọc bỏ mọi ký tự khác.
           let raw = e.target.value.replace(/[^\d.]/g, '');
           const firstDot = raw.indexOf('.');
           if (firstDot !== -1) raw = raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, '');
           expDraft.amountInputRaw = raw;
           updateAmountFromRaw();
-          e.target.value = formatAmountDisplay(raw);
           e.target.style.paddingRight = expDraft.amount ? '92px' : '12px';
+        });
+        amountInputEl.addEventListener('blur', e => {
+          e.target.value = formatAmountDisplay(expDraft.amountInputRaw);
+        });
+        amountInputEl.addEventListener('focus', e => {
+          e.target.value = expDraft.amountInputRaw || '';
         });
       } else {
         amountInputEl.addEventListener('click', () => {
