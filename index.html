@@ -3636,8 +3636,7 @@ function render() {
     html += `<div class="pass-hero">
       <div class="pass-hero-top">
         <div>
-          <div class="eyebrow">${trip.members.length} ${appLang === 'en' ? 'MEMBERS' : 'THÀNH VIÊN'} · ${trip.archived ? (appLang === 'en' ? 'ARCHIVED' : 'ĐÃ LƯU TRỮ') : (appLang === 'en' ? 'CURRENT TRIP' : 'CHUYẾN ĐI HIỆN TẠI')}</div>
-          <div class="tripname">${escapeHtml(trip.name)}</div>
+          <div class="tripname">${escapeHtml(trip.name)}${trip.archived ? ` <span style="font-size:11px; color:var(--text-muted); font-weight:500; font-family: -apple-system, sans-serif;">(${appLang === 'en' ? 'archived' : 'đã lưu trữ'})</span>` : ''}</div>
           <div class="meta">${expenses.length} ${appLang === 'en' ? 'EXPENSES' : 'CHI TIÊU'}</div>
         </div>
         <div class="pass-hero-edit-group">
