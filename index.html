@@ -92,6 +92,53 @@
 
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
+  .pass-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 16px 18px;
+    margin-bottom: 0.9rem;
+  }
+  .pass-hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .pass-hero .eyebrow {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+  }
+  .pass-hero .tripname {
+    font-family: 'Fraunces', serif; font-optical-sizing: auto;
+    font-size: 22px; font-weight: 600; line-height: 1.2; margin-bottom: 6px; letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+  .pass-hero .meta {
+    font-size: 10.5px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pass-hero-edit-group { display: flex; gap: 4px; flex-shrink: 0; }
+  .pass-perf {
+    position: relative; height: 0; border-top: 1.5px dashed var(--border-strong);
+    margin: 14px -18px 0;
+  }
+  .pass-perf::before, .pass-perf::after {
+    content: ''; position: absolute; top: -9px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--bg-tint); border: 1px solid var(--border);
+  }
+  .pass-perf::before { left: -9px; }
+  .pass-perf::after { right: -9px; }
+  .pass-hero-stub {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 12px; gap: 10px;
+  }
+  .pass-hero-stub .stub-label {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); font-weight: 600; margin-bottom: 2px;
+  }
+  .pass-hero-stub .stub-value { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .pass-hero-stub .stub-fx {
+    font-size: 11.5px; color: var(--text-secondary); font-weight: 500;
+    background: var(--surface-2); border-radius: 999px; padding: 5px 11px; white-space: nowrap;
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -200,14 +247,14 @@
   .expense-row-subtitle { font-size: 12px; margin: 1px 0 0; color: var(--text-primary); }
   .expense-row-subtitle .muted { color: var(--text-muted); }
   .expense-row-right { text-align: right; flex-shrink: 0; }
-  .expense-row-amount { font-size: 14.5px; font-weight: 600; margin: 0; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; }
-  .expense-row-conversion { font-size: 11px; font-weight: 400; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+  .expense-row-amount { font-size: 14.5px; font-weight: 600; margin: 0; white-space: nowrap; }
+  .expense-row-conversion { font-size: 11px; font-weight: 400; color: var(--text-muted); }
   .expense-row-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
   .expense-row-meta-line { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px; }
   .expense-row-actions { display: flex; gap: 0; }
   .expense-main { font-size: 14.5px; }
   .expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
-  .amount { font-weight: 600; font-size: 14.5px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; }
+  .amount { font-weight: 600; font-size: 14.5px; white-space: nowrap; }
   .expense-actions { display: flex; gap: 2px; flex-shrink: 0; }
 
   /* Skeleton loading (item 18) - thay cho spinner đơn thuần, phác thảo trước hình
@@ -309,7 +356,7 @@
   }
   .balance-row:last-child { border-bottom: none; }
   .balance-name { font-weight: 500; }
-  .balance-amt { font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .balance-amt { font-weight: 600; }
   .balance-pos { color: var(--success); }
   .balance-neg { color: var(--danger); }
   .balance-note { color: var(--text-muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
@@ -326,8 +373,8 @@
     display: grid; grid-template-columns: 1.1fr 0.9fr 0.9fr 0.9fr 0.9fr;
     align-items: center; padding: 6px 0; gap: 4px; font-size: 14px;
   }
-  .overview-val { text-align: right; font-variant-numeric: tabular-nums; font-family: 'IBM Plex Mono', monospace; }
-  .overview-val-sub { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; font-family: 'IBM Plex Mono', monospace; }
+  .overview-val { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .overview-val-sub { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
 
   .icon-btn {
     width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface); padding: 0; cursor: pointer; display: inline-flex;
@@ -384,7 +431,7 @@
     to { transform: scale(1); }
   }
   .amount-input-large {
-    font-size: 22px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.01em;
+    font-size: 22px; font-weight: 600;
   }
   .amount-input-large::placeholder {
     /* Placeholder chỉ là gợi ý, KHÔNG dùng chung độ đậm/cỡ chữ với giá trị thật
@@ -3586,15 +3633,29 @@ function render() {
   } else if (trip) {
     const expenses = getExpensesForTrip(trip);
 
-    html += `<div class="row" style="justify-content:space-between; margin-bottom:0.6rem; padding: 0 2px;">
-      <h2 style="font-size:16.5px; font-weight:600; margin:0; letter-spacing:-0.01em;">${escapeHtml(trip.name)}${trip.archived ? ' <span style="font-size:11px; color:var(--text-muted); font-weight:500;">(đã lưu trữ)</span>' : ''}</h2>
-      <div class="row" style="gap:2px;">
-        <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
-        ${trip.archived
-          ? `<button class="icon-btn" data-action="unarchiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_unarchive')}" title="${t('btn_unarchive')}">📤</button>`
-          : `<button class="icon-btn" data-action="archiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_archive')}" title="${t('btn_archive')}">🗄️</button>`
-        }
-        ${TRIP_LOCKED_ID ? '' : `<button class="icon-btn" data-action="deleteTrip" aria-label="${t('btn_delete_trip')}" title="${t('btn_delete_trip')}" style="color:var(--danger);">🗑️</button>`}
+    html += `<div class="pass-hero">
+      <div class="pass-hero-top">
+        <div>
+          <div class="eyebrow">${trip.members.length} ${appLang === 'en' ? 'MEMBERS' : 'THÀNH VIÊN'} · ${trip.archived ? (appLang === 'en' ? 'ARCHIVED' : 'ĐÃ LƯU TRỮ') : (appLang === 'en' ? 'CURRENT TRIP' : 'CHUYẾN ĐI HIỆN TẠI')}</div>
+          <div class="tripname">${escapeHtml(trip.name)}</div>
+          <div class="meta">${expenses.length} ${appLang === 'en' ? 'EXPENSES' : 'CHI TIÊU'}</div>
+        </div>
+        <div class="pass-hero-edit-group">
+          <button class="icon-btn" data-action="openRenameTrip" aria-label="${t('edit_trip_aria')}" title="${t('edit_trip_title')}">✏️</button>
+          ${trip.archived
+            ? `<button class="icon-btn" data-action="unarchiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_unarchive')}" title="${t('btn_unarchive')}">📤</button>`
+            : `<button class="icon-btn" data-action="archiveTrip" data-id="${trip.trip_id}" aria-label="${t('btn_archive')}" title="${t('btn_archive')}">🗄️</button>`
+          }
+          ${TRIP_LOCKED_ID ? '' : `<button class="icon-btn" data-action="deleteTrip" aria-label="${t('btn_delete_trip')}" title="${t('btn_delete_trip')}" style="color:var(--danger);">🗑️</button>`}
+        </div>
+      </div>
+      <div class="pass-perf"></div>
+      <div class="pass-hero-stub">
+        <div>
+          <div class="stub-label">${appLang === 'en' ? 'TOTAL SPENT' : 'TỔNG CHI TIÊU'}</div>
+          <div class="stub-value">${fmtHome(computeCategoryTotals(expenses).grandTotal, trip.homeCurrency)}</div>
+        </div>
+        ${trip.foreignCurrency ? `<div class="stub-fx">1 ${escapeHtml(trip.foreignCurrency)} ≈ ${fmtHome(parseFloat(trip.exchangeRate) || 0, trip.homeCurrency)}</div>` : ''}
       </div>
     </div>`;
 
