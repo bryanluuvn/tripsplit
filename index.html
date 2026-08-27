@@ -3654,7 +3654,14 @@ function render() {
           <div class="stub-label">${appLang === 'en' ? 'TOTAL SPENT' : 'TỔNG CHI TIÊU'}</div>
           <div class="stub-value">${fmtHome(computeCategoryTotals(expenses).grandTotal, trip.homeCurrency)}</div>
         </div>
-        ${trip.foreignCurrency ? `<div class="stub-fx">1 ${escapeHtml(trip.foreignCurrency)} ≈ ${fmtHome(parseFloat(trip.exchangeRate) || 0, trip.homeCurrency)}</div>` : ''}
+        ${trip.foreignCurrency ? (() => {
+          const rate = parseFloat(trip.exchangeRate) || 0;
+          const rateDisplay = rate >= 100
+            ? Math.round(rate).toLocaleString('vi-VN')
+            : rate.toLocaleString('vi-VN', { maximumFractionDigits: 4 });
+          const homeSym = trip.homeCurrency === 'VND' ? 'đ' : currencySymbol(trip.homeCurrency);
+          return `<div class="stub-fx">1 ${escapeHtml(trip.foreignCurrency)} ≈ ${rateDisplay}${homeSym}</div>`;
+        })() : ''}
       </div>
     </div>`;
 
