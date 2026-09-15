@@ -2116,7 +2116,7 @@ async function apiGet() {
   const url = TRIP_SHARE_TOKEN
     ? `${API_URL}?ts=${encodeURIComponent(TRIP_SHARE_TOKEN)}`
     : `${API_URL}?ws=${encodeURIComponent(WORKSPACE_ID)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('GET failed');
   const json = await res.json();
   if (json.ok === false) throw new Error(json.error || 'GET failed');
