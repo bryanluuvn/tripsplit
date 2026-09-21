@@ -2577,6 +2577,8 @@ let renameTripQRPreview = null;
 let renameTripQRData = null;
 let renameTripQRMime = null;
 let renameTripRemoveQR = false;
+let viewTripQRDataUrl = null;
+let viewTripQRLoading = false;
 let editMemberDraft = { oldName: '', newName: '' };
 let expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
 let filtersSectionExpanded = false; // mặc định thu gọn phần bộ lọc, bấm mới mở rộng (giống phần Thành viên)
@@ -4290,7 +4292,26 @@ function handleAction(e) {
     return;
   }
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
-  if (action === 'viewTripQR') { modal = 'viewTripQR'; render(); return; }
+  if (action === 'viewTripQR') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const local = trip ? getLocalTripQR(trip.trip_id) : null;
+    if (local) {
+      viewTripQRDataUrl = local;
+      viewTripQRLoading = false;
+    } else {
+      viewTripQRDataUrl = null;
+      viewTripQRLoading = true;
+      // Máy này chưa có cache local (không phải máy đã upload QR) - lấy bytes
+      // gốc qua API JSON như cách generateSummaryImage đã làm, KHÔNG dùng
+      // thẳng URL Drive làm src <img> (link đó hotlink không ổn định).
+      fetchTripQRDataUrl(activeTripId).then(dataUrl => {
+        viewTripQRDataUrl = dataUrl;
+        viewTripQRLoading = false;
+        if (modal === 'viewTripQR') renderModal();
+      });
+    }
+    modal = 'viewTripQR'; render(); return;
+  }
   if (action === 'setDatePreset') {
     const range = computeDatePreset(preset);
     expenseFilter.dateFrom = range.from;
@@ -4896,16 +4917,15 @@ function renderModal() {
   }
 
   if (modal === 'viewTripQR') {
-    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const qrSrc = trip ? (getLocalTripQR(trip.trip_id) || trip.paymentQR) : '';
     overlay.innerHTML = `<div class="modal" style="max-width:340px; text-align:center;">
       <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
         <h2 style="margin:0;">${t('view_qr_btn')}</h2>
         <button class="icon-btn" onclick="window.app.closeModal()" aria-label="${t('aria_close')}">✕</button>
       </div>
-      ${qrSrc && isValidReceiptUrl(qrSrc) ? `
-        <img src="${escapeHtml(qrSrc)}" style="width:100%; max-width:260px; aspect-ratio:1; object-fit:contain; border-radius:var(--radius); border:1px solid var(--border); background:#fff;">
-      ` : `<p class="empty">${t('trip_qr_missing')}</p>`}
+      ${viewTripQRLoading ? `<p class="empty">${t('loading_text')}</p>` :
+        (viewTripQRDataUrl && isValidReceiptUrl(viewTripQRDataUrl) ? `
+        <img src="${escapeHtml(viewTripQRDataUrl)}" style="width:100%; max-width:260px; aspect-ratio:1; object-fit:contain; border-radius:var(--radius); border:1px solid var(--border); background:#fff;">
+      ` : `<p class="empty">${t('trip_qr_missing')}</p>`)}
     </div>`;
   }
 
