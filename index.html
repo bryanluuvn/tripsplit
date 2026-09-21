@@ -836,6 +836,8 @@ const APP_TRANSLATIONS = {
     trip_qr_add: 'Thêm QR (vd: mã ngân hàng)',
     trip_qr_change: 'Đổi QR',
     trip_qr_hint: 'Hiện trên ảnh tổng kết để mọi người quét chuyển khoản.',
+    view_qr_btn: 'Xem QR',
+    trip_qr_missing: 'Trip này chưa có QR thanh toán.',
     activity_log_title: 'Lịch sử',
     activity_log_empty: 'Chưa có hoạt động nào',
     act_created_trip: 'Tạo chuyến',
@@ -1155,6 +1157,8 @@ const APP_TRANSLATIONS = {
     trip_qr_add: 'Add QR (e.g. bank transfer code)',
     trip_qr_change: 'Change QR',
     trip_qr_hint: 'Shown on the summary image so others can scan to pay.',
+    view_qr_btn: 'View QR',
+    trip_qr_missing: 'This trip has no payment QR set.',
     activity_log_title: 'History',
     activity_log_empty: 'No activity yet',
     act_created_trip: 'Created trip',
@@ -4077,7 +4081,10 @@ function render() {
       html += `<div class="card" id="settlementCard">
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
-          <button data-action="openExportMenu" data-scope="trip" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
+          <div class="row" style="gap:6px;">
+            ${trip.paymentQR ? `<button data-action="viewTripQR" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; font-weight:600;">📱 ${t('view_qr_btn')}</button>` : ''}
+            <button data-action="openExportMenu" data-scope="trip" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
+          </div>
         </div>`;
       if (settlements.length === 0) {
         html += `<p class="empty">${t('all_settled_full')}</p>`;
@@ -4283,6 +4290,7 @@ function handleAction(e) {
     return;
   }
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
+  if (action === 'viewTripQR') { modal = 'viewTripQR'; render(); return; }
   if (action === 'setDatePreset') {
     const range = computeDatePreset(preset);
     expenseFilter.dateFrom = range.from;
@@ -4884,6 +4892,20 @@ function renderModal() {
         <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
         <button class="primary" onclick="window.app.renameTrip()">${t('btn_save')}</button>
       </div>
+    </div>`;
+  }
+
+  if (modal === 'viewTripQR') {
+    const trip = getTripObjects().find(t => t.trip_id === activeTripId);
+    const qrSrc = trip ? (getLocalTripQR(trip.trip_id) || trip.paymentQR) : '';
+    overlay.innerHTML = `<div class="modal" style="max-width:340px; text-align:center;">
+      <div class="row" style="justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+        <h2 style="margin:0;">${t('view_qr_btn')}</h2>
+        <button class="icon-btn" onclick="window.app.closeModal()" aria-label="${t('aria_close')}">✕</button>
+      </div>
+      ${qrSrc && isValidReceiptUrl(qrSrc) ? `
+        <img src="${escapeHtml(qrSrc)}" style="width:100%; max-width:260px; aspect-ratio:1; object-fit:contain; border-radius:var(--radius); border:1px solid var(--border); background:#fff;">
+      ` : `<p class="empty">${t('trip_qr_missing')}</p>`}
     </div>`;
   }
 
