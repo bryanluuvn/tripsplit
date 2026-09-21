@@ -1609,15 +1609,14 @@ function loadImageFromDataUrl(dataUrl) {
 // Lấy bytes gốc của ảnh QR qua API JSON (không qua URL Drive trực tiếp) - dùng
 // cho thiết bị KHÔNG có bản cache local (vd người khác trong nhóm, hoặc đổi
 // trình duyệt) - đảm bảo mọi thiết bị đều xuất ra ảnh QR nét như nhau.
-async function fetchTripQRDataUrl(tripId) {
+async function fetchTripQRDataUrl(tripId, sourceUrl) {
   try {
     const res = await apiPost({ action: 'getTripQRData', trip_id: tripId });
     if (res && res.ok && res.qr_data) {
       const dataUrl = `data:${res.qr_mime || 'image/png'};base64,${res.qr_data}`;
-      // Lưu lại vào cache local của MÁY NÀY - lần sau (xem QR hoặc xuất ảnh)
-      // trên đúng máy này sẽ lấy thẳng từ đây, không cần gọi lại Apps Script
-      // (vốn có độ trễ đáng kể) nữa. Chỉ chậm đúng 1 lần đầu tiên/thiết bị.
-      setLocalTripQR(tripId, dataUrl);
+      // Lưu lại vào cache local của MÁY NÀY, gắn kèm sourceUrl hiện tại để lần
+      // sau tự phát hiện được nếu QR đã bị đổi (xem comment ở setLocalTripQR).
+      setLocalTripQR(tripId, dataUrl, sourceUrl);
       return dataUrl;
     }
   } catch (e) {
@@ -1633,10 +1632,10 @@ async function generateSummaryImage(trip, expenses, balances, settlements, cashF
   // đối) - nếu không có (thiết bị khác, hoặc lần đầu mở app này sau khi người
   // khác đã thêm QR), lấy bytes gốc qua API JSON thay vì tải trực tiếp URL
   // Drive, để đảm bảo LUÔN nét như nhau trên mọi thiết bị.
-  const localQR = trip.trip_id ? getLocalTripQR(trip.trip_id) : null;
+  const localQR = trip.trip_id ? getLocalTripQR(trip.trip_id, trip.paymentQR) : null;
   let qrDataUrl = localQR;
   if (!qrDataUrl && trip.paymentQR && trip.trip_id) {
-    qrDataUrl = await fetchTripQRDataUrl(trip.trip_id);
+    qrDataUrl = await fetchTripQRDataUrl(trip.trip_id, trip.paymentQR);
   }
   const qrImg = await loadImageFromDataUrl(qrDataUrl);
   const canvas = document.createElement('canvas');
@@ -2143,14 +2142,22 @@ function compressReceiptImage(file, maxDim = 1280, quality = 0.7) {
 // nét tuyệt đối để máy quét đọc được, nên PHẢI dùng PNG (lossless), chỉ resize
 // kích thước xuống mức vừa đủ chứ không nén chất lượng.
 // Cache ảnh QR ngay trên máy (localStorage), theo trip_id - dùng khi xuất ảnh
-// tổng kết để vẽ ĐÚNG bản đã nén lúc upload, không phải tải lại qua URL Drive
-// (vốn có thể bị nén lại/CORS chặn). Chỉ có tác dụng đầy đủ trên đúng thiết bị
-// đã upload QR đó; thiết bị khác vẫn fallback về link Drive.
-function getLocalTripQR(tripId) {
-  try { return localStorage.getItem(`tripQR_${tripId}`) || null; } catch (e) { return null; }
+// tổng kết hoặc xem QR trong app, để khỏi phải gọi lại Apps Script (chậm) mỗi
+// lần. Gắn kèm "sourceUrl" (link Drive hiện tại của QR) - nếu QR bị đổi (upload
+// QR mới), link Drive sẽ đổi theo vì server luôn tạo file mới, nên so sánh
+// sourceUrl lưu trong cache với sourceUrl hiện tại (trip.paymentQR) sẽ tự phát
+// hiện được cache đã cũ, không cần ai xóa cache tay.
+function getLocalTripQR(tripId, expectedSourceUrl) {
+  try {
+    const raw = localStorage.getItem(`tripQR_${tripId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (expectedSourceUrl && parsed.sourceUrl && parsed.sourceUrl !== expectedSourceUrl) return null; // QR đã đổi - cache cũ, bỏ qua
+    return parsed.dataUrl || null;
+  } catch (e) { return null; }
 }
-function setLocalTripQR(tripId, dataUrl) {
-  try { localStorage.setItem(`tripQR_${tripId}`, dataUrl); } catch (e) { /* hết quota thì bỏ qua, không chặn app */ }
+function setLocalTripQR(tripId, dataUrl, sourceUrl) {
+  try { localStorage.setItem(`tripQR_${tripId}`, JSON.stringify({ dataUrl, sourceUrl: sourceUrl || null })); } catch (e) { /* hết quota thì bỏ qua, không chặn app */ }
 }
 function removeLocalTripQR(tripId) {
   try { localStorage.removeItem(`tripQR_${tripId}`); } catch (e) {}
@@ -4089,7 +4096,10 @@ function render() {
         <div class="card-head">
           <span class="card-title">${t('settlement_title')}</span>
           <div class="row" style="gap:6px;">
-            ${trip.paymentQR ? `<button data-action="viewTripQR" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; font-weight:600;">📱 ${t('view_qr_btn')}</button>` : ''}
+            ${trip.paymentQR ? `<button data-action="viewTripQR" aria-label="${t('view_qr_btn')}" title="${t('view_qr_btn')}" style="font-size:12.5px; height:32px; padding:0 10px; display:inline-flex; align-items:center; gap:4px; font-weight:600;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/><rect x="18" y="14" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/><rect x="14" y="18" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/></svg>
+              QR
+            </button>` : ''}
             <button data-action="openExportMenu" data-scope="trip" style="font-size:12.5px; height:32px; padding:0 12px; display:inline-flex; align-items:center; gap:5px; background:var(--accent-bg); color:var(--accent-text); border-color:var(--accent); font-weight:600;">📤 ${t('export_share_btn')}</button>
           </div>
         </div>`;
@@ -4299,7 +4309,7 @@ function handleAction(e) {
   if (action === 'openExportMenu') { window.app.openExportMenu(scope); return; }
   if (action === 'viewTripQR') {
     const trip = getTripObjects().find(t => t.trip_id === activeTripId);
-    const local = trip ? getLocalTripQR(trip.trip_id) : null;
+    const local = trip ? getLocalTripQR(trip.trip_id, trip.paymentQR) : null;
     if (local) {
       viewTripQRDataUrl = local;
       viewTripQRLoading = false;
@@ -4309,7 +4319,7 @@ function handleAction(e) {
       // Máy này chưa có cache local (không phải máy đã upload QR) - lấy bytes
       // gốc qua API JSON như cách generateSummaryImage đã làm, KHÔNG dùng
       // thẳng URL Drive làm src <img> (link đó hotlink không ổn định).
-      fetchTripQRDataUrl(activeTripId).then(dataUrl => {
+      fetchTripQRDataUrl(activeTripId, trip ? trip.paymentQR : null).then(dataUrl => {
         viewTripQRDataUrl = dataUrl;
         viewTripQRLoading = false;
         if (modal === 'viewTripQR') renderModal();
@@ -4429,7 +4439,7 @@ function handleAction(e) {
       renameTripCustomCurrency = '';
     }
     renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
-    renameTripQRPreview = getLocalTripQR(trip.trip_id) || trip.payment_qr || null;
+    renameTripQRPreview = getLocalTripQR(trip.trip_id, trip.payment_qr) || trip.payment_qr || null;
     renameTripQRData = null;
     renameTripQRMime = null;
     renameTripRemoveQR = false;
@@ -4905,8 +4915,8 @@ function renderModal() {
             </div>
             <label for="tripQRInput" style="font-size:12.5px; color:var(--accent); font-weight:600; cursor:pointer;">${t('trip_qr_change')}</label>
           ` : `
-            <label for="tripQRInput" title="${t('trip_qr_add')}" style="display:flex; align-items:center; justify-content:center; width:56px; height:56px; flex-shrink:0; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); cursor:pointer; font-size:20px;">
-              📱
+            <label for="tripQRInput" title="${t('trip_qr_add')}" style="display:flex; align-items:center; justify-content:center; width:56px; height:56px; flex-shrink:0; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); cursor:pointer; color:var(--text-muted);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/><rect x="18" y="14" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/><rect x="14" y="18" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/></svg>
             </label>
             <label for="tripQRInput" style="font-size:12.5px; color:var(--text-secondary); cursor:pointer;">${t('trip_qr_add')}</label>
           `}
@@ -6054,7 +6064,7 @@ window.app = {
         trip.home_currency = newHomeCurrency;
         if (qrDataToSend) {
           trip.payment_qr = `data:image/png;base64,${qrDataToSend}`; // tạm thời hiện local, server trả về link Drive thật ở lần refresh kế tiếp
-          setLocalTripQR(activeTripId, trip.payment_qr);
+          setLocalTripQR(activeTripId, trip.payment_qr, trip.payment_qr);
         } else if (shouldRemoveQR) {
           trip.payment_qr = '';
           removeLocalTripQR(activeTripId);
