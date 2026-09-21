@@ -1613,7 +1613,12 @@ async function fetchTripQRDataUrl(tripId) {
   try {
     const res = await apiPost({ action: 'getTripQRData', trip_id: tripId });
     if (res && res.ok && res.qr_data) {
-      return `data:${res.qr_mime || 'image/png'};base64,${res.qr_data}`;
+      const dataUrl = `data:${res.qr_mime || 'image/png'};base64,${res.qr_data}`;
+      // Lưu lại vào cache local của MÁY NÀY - lần sau (xem QR hoặc xuất ảnh)
+      // trên đúng máy này sẽ lấy thẳng từ đây, không cần gọi lại Apps Script
+      // (vốn có độ trễ đáng kể) nữa. Chỉ chậm đúng 1 lần đầu tiên/thiết bị.
+      setLocalTripQR(tripId, dataUrl);
+      return dataUrl;
     }
   } catch (e) {
     console.warn('[TripQR] fetch data failed:', e);
