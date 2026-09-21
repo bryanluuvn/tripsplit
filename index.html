@@ -1654,7 +1654,7 @@ async function generateSummaryImage(trip, expenses, balances, settlements, cashF
   if (hasCashFund) estHeight += 22 + cashFundRemaining.length * 26 + 10 + 28; // khối quỹ tiền mặt (1 dòng/đơn vị) + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
   if (showOptimized) estHeight += 24 + optimizedSettlements.length * 28 + 10; // cách chuyển tiền tối ưu
-  if (qrImg) estHeight += 16 + 120 + 20 + 28; // khối QR thanh toán (nếu có)
+  if (qrImg) estHeight += 16 + 200 + 20 + 28; // khối QR thanh toán (nếu có)
   estHeight += 20; // footer + padding đáy
 
   canvas.width = W * scale;
@@ -1901,13 +1901,15 @@ async function generateSummaryImage(trip, expenses, balances, settlements, cashF
     ctx.textAlign = 'left';
     ctx.fillText(t('trip_qr_label').toUpperCase(), PAD, y);
     y += 16;
-    const qrSize = 120;
+    const qrSize = 200;
     const qrX = (W - qrSize) / 2; // căn giữa
     ctx.save();
     roundRect(ctx, qrX, y, qrSize, qrSize, 10);
     ctx.clip();
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(qrX, y, qrSize, qrSize);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     // Vẽ vừa khít khung vuông theo kiểu "contain" - giữ nguyên tỉ lệ gốc, không méo ảnh
     const qrScale = Math.min(qrSize / qrImg.width, qrSize / qrImg.height);
     const dw = qrImg.width * qrScale, dh = qrImg.height * qrScale;
@@ -2145,7 +2147,7 @@ function removeLocalTripQR(tripId) {
   try { localStorage.removeItem(`tripQR_${tripId}`); } catch (e) {}
 }
 
-function compressQRImage(file, maxDim = 500) {
+function compressQRImage(file, maxDim = 900) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
