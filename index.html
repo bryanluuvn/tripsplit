@@ -1589,30 +1589,47 @@ function renderDailyChart(expenses) {
 // ở cuối generateSummaryImage sẽ ném lỗi và hỏng luôn việc xuất ảnh tổng kết.
 // Luôn resolve (không bao giờ reject) - lỗi tải/CORS thì trả về null, để việc
 // thiếu QR không chặn xuất ảnh tổng kết.
-function loadQRImageSafe(url) {
+// Nạp ảnh từ data: URI để vẽ lên canvas - luôn AN TOÀN tuyệt đối (không có
+// khái niệm CORS với data URI), khác hẳn việc nạp trực tiếp 1 URL Drive như
+// trước (không đảm bảo được Google có trả CORS header ổn định hay không).
+function loadImageFromDataUrl(dataUrl) {
   return new Promise((resolve) => {
+    if (!dataUrl) { resolve(null); return; }
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const testCanvas = document.createElement('canvas');
-        testCanvas.width = 1; testCanvas.height = 1;
-        testCanvas.getContext('2d').drawImage(img, 0, 0, 1, 1);
-        testCanvas.toDataURL();
-        resolve(img);
-      } catch (e) {
-        resolve(null);
-      }
-    };
+    img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    img.src = url;
+    img.src = dataUrl;
   });
+}
+
+// Lấy bytes gốc của ảnh QR qua API JSON (không qua URL Drive trực tiếp) - dùng
+// cho thiết bị KHÔNG có bản cache local (vd người khác trong nhóm, hoặc đổi
+// trình duyệt) - đảm bảo mọi thiết bị đều xuất ra ảnh QR nét như nhau.
+async function fetchTripQRDataUrl(tripId) {
+  try {
+    const res = await apiPost({ action: 'getTripQRData', trip_id: tripId });
+    if (res && res.ok && res.qr_data) {
+      return `data:${res.qr_mime || 'image/png'};base64,${res.qr_data}`;
+    }
+  } catch (e) {
+    console.warn('[TripQR] fetch data failed:', e);
+  }
+  return null;
 }
 
 async function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining, optimizedSettlements) {
   const W = 600;
   const PAD = 36;
-  const qrImg = (trip.paymentQR && isValidReceiptUrl(trip.paymentQR)) ? await loadQRImageSafe(trip.paymentQR) : null;
+  // Ưu tiên bản cache local (đã lưu ĐÚNG lúc upload trên máy này, nét tuyệt
+  // đối) - nếu không có (thiết bị khác, hoặc lần đầu mở app này sau khi người
+  // khác đã thêm QR), lấy bytes gốc qua API JSON thay vì tải trực tiếp URL
+  // Drive, để đảm bảo LUÔN nét như nhau trên mọi thiết bị.
+  const localQR = trip.trip_id ? getLocalTripQR(trip.trip_id) : null;
+  let qrDataUrl = localQR;
+  if (!qrDataUrl && trip.paymentQR && trip.trip_id) {
+    qrDataUrl = await fetchTripQRDataUrl(trip.trip_id);
+  }
+  const qrImg = await loadImageFromDataUrl(qrDataUrl);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const scale = 2;
@@ -2114,6 +2131,20 @@ function compressReceiptImage(file, maxDim = 1280, quality = 0.7) {
 // (JPEG, nén được vì chỉ cần đọc được bằng mắt), mã QR cần giữ các ô module rõ
 // nét tuyệt đối để máy quét đọc được, nên PHẢI dùng PNG (lossless), chỉ resize
 // kích thước xuống mức vừa đủ chứ không nén chất lượng.
+// Cache ảnh QR ngay trên máy (localStorage), theo trip_id - dùng khi xuất ảnh
+// tổng kết để vẽ ĐÚNG bản đã nén lúc upload, không phải tải lại qua URL Drive
+// (vốn có thể bị nén lại/CORS chặn). Chỉ có tác dụng đầy đủ trên đúng thiết bị
+// đã upload QR đó; thiết bị khác vẫn fallback về link Drive.
+function getLocalTripQR(tripId) {
+  try { return localStorage.getItem(`tripQR_${tripId}`) || null; } catch (e) { return null; }
+}
+function setLocalTripQR(tripId, dataUrl) {
+  try { localStorage.setItem(`tripQR_${tripId}`, dataUrl); } catch (e) { /* hết quota thì bỏ qua, không chặn app */ }
+}
+function removeLocalTripQR(tripId) {
+  try { localStorage.removeItem(`tripQR_${tripId}`); } catch (e) {}
+}
+
 function compressQRImage(file, maxDim = 500) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4362,7 +4393,7 @@ function handleAction(e) {
       renameTripCustomCurrency = '';
     }
     renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
-    renameTripQRPreview = trip.payment_qr || null;
+    renameTripQRPreview = getLocalTripQR(trip.trip_id) || trip.payment_qr || null;
     renameTripQRData = null;
     renameTripQRMime = null;
     renameTripRemoveQR = false;
@@ -5972,8 +6003,13 @@ window.app = {
         trip.foreign_currency = newCurrency;
         trip.exchange_rate = newRate;
         trip.home_currency = newHomeCurrency;
-        if (qrDataToSend) trip.payment_qr = `data:image/png;base64,${qrDataToSend}`; // tạm thời hiện local, server trả về link Drive thật ở lần refresh kế tiếp
-        else if (shouldRemoveQR) trip.payment_qr = '';
+        if (qrDataToSend) {
+          trip.payment_qr = `data:image/png;base64,${qrDataToSend}`; // tạm thời hiện local, server trả về link Drive thật ở lần refresh kế tiếp
+          setLocalTripQR(activeTripId, trip.payment_qr);
+        } else if (shouldRemoveQR) {
+          trip.payment_qr = '';
+          removeLocalTripQR(activeTripId);
+        }
       },
       () => {
         let chain = apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name }).then(() =>
