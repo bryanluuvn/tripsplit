@@ -832,6 +832,10 @@ const APP_TRANSLATIONS = {
     remove_receipt_aria: 'Xóa ảnh hóa đơn',
     view_receipt_aria: 'Xem hóa đơn',
     receipt_error: 'Không xử lý được ảnh, thử lại nhé',
+    trip_qr_label: 'QR thanh toán',
+    trip_qr_add: 'Thêm QR (vd: mã ngân hàng)',
+    trip_qr_change: 'Đổi QR',
+    trip_qr_hint: 'Hiện trên ảnh tổng kết để mọi người quét chuyển khoản.',
     activity_log_title: 'Lịch sử',
     activity_log_empty: 'Chưa có hoạt động nào',
     act_created_trip: 'Tạo chuyến',
@@ -1147,6 +1151,10 @@ const APP_TRANSLATIONS = {
     remove_receipt_aria: 'Remove receipt',
     view_receipt_aria: 'View receipt',
     receipt_error: 'Could not process the image, please try again',
+    trip_qr_label: 'Payment QR',
+    trip_qr_add: 'Add QR (e.g. bank transfer code)',
+    trip_qr_change: 'Change QR',
+    trip_qr_hint: 'Shown on the summary image so others can scan to pay.',
     activity_log_title: 'History',
     activity_log_empty: 'No activity yet',
     act_created_trip: 'Created trip',
@@ -1576,9 +1584,35 @@ function renderDailyChart(expenses) {
 }
 
 
-function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining, optimizedSettlements) {
+// Tải ảnh QR để vẽ lên canvas - PHẢI kiểm tra ảnh có "làm bẩn" canvas không (do
+// thiếu CORS header từ Google Drive) TRƯỚC khi dùng, nếu không canvas.toBlob()
+// ở cuối generateSummaryImage sẽ ném lỗi và hỏng luôn việc xuất ảnh tổng kết.
+// Luôn resolve (không bao giờ reject) - lỗi tải/CORS thì trả về null, để việc
+// thiếu QR không chặn xuất ảnh tổng kết.
+function loadQRImageSafe(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const testCanvas = document.createElement('canvas');
+        testCanvas.width = 1; testCanvas.height = 1;
+        testCanvas.getContext('2d').drawImage(img, 0, 0, 1, 1);
+        testCanvas.toDataURL();
+        resolve(img);
+      } catch (e) {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+async function generateSummaryImage(trip, expenses, balances, settlements, cashFundRemaining, optimizedSettlements) {
   const W = 600;
   const PAD = 36;
+  const qrImg = (trip.paymentQR && isValidReceiptUrl(trip.paymentQR)) ? await loadQRImageSafe(trip.paymentQR) : null;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const scale = 2;
@@ -1603,6 +1637,7 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
   if (hasCashFund) estHeight += 22 + cashFundRemaining.length * 26 + 10 + 28; // khối quỹ tiền mặt (1 dòng/đơn vị) + line
   estHeight += 24 + Math.max(settlements.length, 1) * 28 + 10; // settlement
   if (showOptimized) estHeight += 24 + optimizedSettlements.length * 28 + 10; // cách chuyển tiền tối ưu
+  if (qrImg) estHeight += 16 + 120 + 20 + 28; // khối QR thanh toán (nếu có)
   estHeight += 20; // footer + padding đáy
 
   canvas.width = W * scale;
@@ -1842,6 +1877,35 @@ function generateSummaryImage(trip, expenses, balances, settlements, cashFundRem
     y += 10;
   }
 
+  // --- QR thanh toán (nếu trip có set) ---
+  if (qrImg) {
+    ctx.fillStyle = '#9295B0';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(t('trip_qr_label').toUpperCase(), PAD, y);
+    y += 16;
+    const qrSize = 120;
+    const qrX = (W - qrSize) / 2; // căn giữa
+    ctx.save();
+    roundRect(ctx, qrX, y, qrSize, qrSize, 10);
+    ctx.clip();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(qrX, y, qrSize, qrSize);
+    // Vẽ vừa khít khung vuông theo kiểu "contain" - giữ nguyên tỉ lệ gốc, không méo ảnh
+    const qrScale = Math.min(qrSize / qrImg.width, qrSize / qrImg.height);
+    const dw = qrImg.width * qrScale, dh = qrImg.height * qrScale;
+    ctx.drawImage(qrImg, qrX + (qrSize - dw) / 2, y + (qrSize - dh) / 2, dw, dh);
+    ctx.restore();
+    ctx.strokeStyle = '#E3E5F2';
+    ctx.lineWidth = 1;
+    roundRect(ctx, qrX, y, qrSize, qrSize, 10);
+    ctx.stroke();
+    y += qrSize + 20;
+    ctx.strokeStyle = '#E3E5F2';
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+    y += 28;
+  }
+
   // --- Footer ---
   ctx.fillStyle = '#9295B0';
   ctx.font = '400 11px -apple-system, sans-serif';
@@ -2045,6 +2109,36 @@ function compressReceiptImage(file, maxDim = 1280, quality = 0.7) {
     reader.readAsDataURL(file);
   });
 }
+
+// Resize (không nén kiểu lossy) ảnh QR thanh toán về PNG - khác với ảnh hóa đơn
+// (JPEG, nén được vì chỉ cần đọc được bằng mắt), mã QR cần giữ các ô module rõ
+// nét tuyệt đối để máy quét đọc được, nên PHẢI dùng PNG (lossless), chỉ resize
+// kích thước xuống mức vừa đủ chứ không nén chất lượng.
+function compressQRImage(file, maxDim = 500) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else { width = Math.round(width * maxDim / height); height = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('image decode failed'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 
 // Đổi timestamp ISO (lưu theo giờ VN) thành chuỗi tương đối kiểu "5 phút trước"
 function formatRelativeTime(isoString) {
@@ -2442,6 +2536,10 @@ let newTripHomeCurrency = 'VND';
 let renameTripHomeCurrency = 'VND';
 let renameTripRate = '';
 let renameTripCustomCurrency = '';
+let renameTripQRPreview = null;
+let renameTripQRData = null;
+let renameTripQRMime = null;
+let renameTripRemoveQR = false;
 let editMemberDraft = { oldName: '', newName: '' };
 let expenseFilter = { person: '', splitMember: '', category: '', dateFrom: '', dateTo: '', datePreset: 'all' };
 let filtersSectionExpanded = false; // mặc định thu gọn phần bộ lọc, bấm mới mở rộng (giống phần Thành viên)
@@ -2564,6 +2662,7 @@ function getTripObjects() {
     foreignCurrency: (t.foreign_currency || '').toUpperCase(),
     exchangeRate: parseFloat(t.exchange_rate) || 1,  // ← Default to 1!
     homeCurrency: (t.home_currency || 'VND').toUpperCase(),
+    paymentQR: t.payment_qr || '',
   }));
 }
 
@@ -4263,6 +4362,10 @@ function handleAction(e) {
       renameTripCustomCurrency = '';
     }
     renameTripRate = trip.exchange_rate ? String(trip.exchange_rate) : '';
+    renameTripQRPreview = trip.payment_qr || null;
+    renameTripQRData = null;
+    renameTripQRMime = null;
+    renameTripRemoveQR = false;
     modal = 'renameTrip'; render();
   }
 
@@ -4725,6 +4828,25 @@ function renderModal() {
       <div style="font-size:12px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px;">
         ${t('trip_rate_hint2')}
       </div>` : ''}
+      <div class="field">
+        <label>${t('trip_qr_label')}</label>
+        <div class="row" style="gap:10px; align-items:center;">
+          ${renameTripQRPreview && !renameTripRemoveQR ? `
+            <div style="position:relative; width:56px; height:56px; flex-shrink:0;">
+              <img src="${isValidReceiptUrl(renameTripQRPreview) ? escapeHtml(renameTripQRPreview) : ''}" style="width:56px; height:56px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--border); display:block;">
+              <button type="button" id="removeTripQRBtn" aria-label="${t('remove_receipt_aria')}" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:10px; line-height:1; cursor:pointer;">✕</button>
+            </div>
+            <label for="tripQRInput" style="font-size:12.5px; color:var(--accent); font-weight:600; cursor:pointer;">${t('trip_qr_change')}</label>
+          ` : `
+            <label for="tripQRInput" title="${t('trip_qr_add')}" style="display:flex; align-items:center; justify-content:center; width:56px; height:56px; flex-shrink:0; border:1px dashed var(--border-strong); border-radius:var(--radius-sm); cursor:pointer; font-size:20px;">
+              📱
+            </label>
+            <label for="tripQRInput" style="font-size:12.5px; color:var(--text-secondary); cursor:pointer;">${t('trip_qr_add')}</label>
+          `}
+        </div>
+        <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">${t('trip_qr_hint')}</div>
+        <input type="file" id="tripQRInput" accept="image/*" style="display:none;">
+      </div>
       <div class="row" style="justify-content:flex-end;">
         <button onclick="window.app.closeModal()">${t('btn_cancel')}</button>
         <button class="primary" onclick="window.app.renameTrip()">${t('btn_save')}</button>
@@ -4928,6 +5050,36 @@ function renderModal() {
         if (labelEl) labelEl.innerHTML = `1 ${escapeHtml(renameTripCustomCurrency || '?')} = ? ${escapeHtml(renameTripHomeCurrency || 'VND')}`;
       });
       customCurInput2.focus();
+    }
+
+    const tripQRInput = document.getElementById('tripQRInput');
+    if (tripQRInput) {
+      tripQRInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const dataUrl = await compressQRImage(file);
+          renameTripQRPreview = dataUrl;
+          renameTripQRData = dataUrl.split(',')[1] || '';
+          renameTripQRMime = 'image/png';
+          renameTripRemoveQR = false;
+          renderModal();
+        } catch (err) {
+          console.warn('[TripQR] compress failed:', err);
+          showToast(t('receipt_error'));
+        }
+      });
+    }
+    const removeTripQRBtn = document.getElementById('removeTripQRBtn');
+    if (removeTripQRBtn) {
+      removeTripQRBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        renameTripQRPreview = null;
+        renameTripQRData = null;
+        renameTripQRMime = null;
+        renameTripRemoveQR = true;
+        renderModal();
+      });
     }
   }
   if (modal === 'editMember') {
@@ -5810,6 +5962,9 @@ window.app = {
     }
 
     const newHomeCurrency = renameTripHomeCurrency || 'VND';
+    const qrDataToSend = renameTripQRData;
+    const qrMimeToSend = renameTripQRMime;
+    const shouldRemoveQR = renameTripRemoveQR;
     modal = null;
     withSaving(
       () => {
@@ -5817,10 +5972,20 @@ window.app = {
         trip.foreign_currency = newCurrency;
         trip.exchange_rate = newRate;
         trip.home_currency = newHomeCurrency;
+        if (qrDataToSend) trip.payment_qr = `data:image/png;base64,${qrDataToSend}`; // tạm thời hiện local, server trả về link Drive thật ở lần refresh kế tiếp
+        else if (shouldRemoveQR) trip.payment_qr = '';
       },
-      () => apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name }).then(() =>
-        apiPost({ action: 'setTripCurrency', trip_id: activeTripId, foreign_currency: newCurrency, exchange_rate: newRate, home_currency: newHomeCurrency })
-      )
+      () => {
+        let chain = apiPost({ action: 'renameTrip', trip_id: activeTripId, trip_name: name }).then(() =>
+          apiPost({ action: 'setTripCurrency', trip_id: activeTripId, foreign_currency: newCurrency, exchange_rate: newRate, home_currency: newHomeCurrency })
+        );
+        if (qrDataToSend) {
+          chain = chain.then(() => apiPost({ action: 'setTripQR', trip_id: activeTripId, qr_data: qrDataToSend, qr_mime: qrMimeToSend || 'image/png' }));
+        } else if (shouldRemoveQR) {
+          chain = chain.then(() => apiPost({ action: 'setTripQR', trip_id: activeTripId, remove_qr: true }));
+        }
+        return chain;
+      }
     );
   },
 
